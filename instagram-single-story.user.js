@@ -316,6 +316,270 @@
         }, 500);
     }
 
+    // Button zum Hinzufügen der automatischen Navigation zum Extrahieren der Story-ID
+    function addNavigationIDFinderButton() {
+        if (document.getElementById('isv-navigation-id-button')) {
+            return;
+        }
+        
+        const button = document.createElement('button');
+        button.id = 'isv-navigation-id-button';
+        button.textContent = 'Story-ID durch Navigation finden';
+        button.style.cssText = `
+            position: fixed;
+            top: 90px;
+            left: 10px;
+            z-index: 9999999;
+            background: rgba(0, 128, 255, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: Arial, sans-serif;
+            transition: opacity 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        `;
+        
+        button.addEventListener('click', function() {
+            findStoryIdByNavigation();
+        });
+        
+        // Füge den Button direkt zum body hinzu
+        document.body.appendChild(button);
+        
+        // Stelle sicher, dass der Button sichtbar ist
+        setTimeout(() => {
+            if (document.getElementById('isv-navigation-id-button')) {
+                document.getElementById('isv-navigation-id-button').style.display = 'block';
+            }
+        }, 500);
+    }
+
+    // Funktion zum Finden der Story-ID durch Navigation
+    function findStoryIdByNavigation() {
+        console.log("[ISV-DEBUG] Starte Navigation zur Story-ID-Ermittlung");
+        
+        // Aktuelle URL speichern, um später zurückzukehren
+        const originalUrl = window.location.href;
+        const originalTitle = document.title;
+        
+        // Status anzeigen
+        const statusIndicator = document.createElement('div');
+        statusIndicator.id = 'isv-navigation-status';
+        statusIndicator.style.cssText = `
+            position: fixed;
+            top: 130px;
+            left: 10px;
+            z-index: 9999999;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-family: Arial, sans-serif;
+            max-width: 300px;
+        `;
+        statusIndicator.textContent = 'Navigiere zu nächster Story...';
+        document.body.appendChild(statusIndicator);
+        
+        // Finde den "Weiter"/"Next" Button für die nächste Story
+        const nextButton = findNavigationButton('next');
+        
+        if (!nextButton) {
+            statusIndicator.textContent = 'Fehler: Kann "Weiter"-Button nicht finden!';
+            statusIndicator.style.background = 'rgba(255, 0, 0, 0.8)';
+            console.error("[ISV-DEBUG] Kann keinen 'Weiter'-Button finden");
+            
+            // Nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                if (document.getElementById('isv-navigation-status')) {
+                    document.getElementById('isv-navigation-status').remove();
+                }
+            }, 3000);
+            return;
+        }
+        
+        // Klicke auf "Weiter" und warte auf URL-Änderung
+        console.log("[ISV-DEBUG] Klicke auf 'Weiter'-Button:", nextButton);
+        
+        // Setze einen Timeout, falls die Navigation fehlschlägt
+        let navigationTimeout = setTimeout(() => {
+            if (document.getElementById('isv-navigation-status')) {
+                statusIndicator.textContent = 'Fehler: Navigation zur nächsten Story fehlgeschlagen!';
+                statusIndicator.style.background = 'rgba(255, 0, 0, 0.8)';
+                
+                // Nach 3 Sekunden ausblenden
+                setTimeout(() => {
+                    if (document.getElementById('isv-navigation-status')) {
+                        document.getElementById('isv-navigation-status').remove();
+                    }
+                }, 3000);
+            }
+        }, 5000);
+        
+        // URL-Überwachung für Änderungen
+        const originalUrlObj = new URL(originalUrl);
+        const originalPathname = originalUrlObj.pathname;
+        
+        // Monitor für URL-Änderungen
+        const urlCheckInterval = setInterval(() => {
+            const currentUrl = window.location.href;
+            const currentUrlObj = new URL(currentUrl);
+            
+            // Prüfe, ob sich die URL geändert hat
+            if (currentUrlObj.pathname !== originalPathname) {
+                clearInterval(urlCheckInterval);
+                clearTimeout(navigationTimeout);
+                
+                console.log("[ISV-DEBUG] URL hat sich geändert:", currentUrl);
+                statusIndicator.textContent = 'Story gewechselt! Analysiere neue URL...';
+                
+                // Analysiere die neue URL
+                const storyIdMatch = currentUrl.match(/\/stories\/[^\/]+\/(\d+)/);
+                if (storyIdMatch && storyIdMatch[1]) {
+                    const storyId = storyIdMatch[1];
+                    console.log("[ISV-DEBUG] Gefundene Story-ID:", storyId);
+                    
+                    statusIndicator.textContent = `Story-ID gefunden: ${storyId}. Kehre zur ursprünglichen Story zurück...`;
+                    statusIndicator.style.background = 'rgba(0, 128, 0, 0.8)';
+                    
+                    // Warte einen Moment, um die neue Story anzuzeigen
+                    setTimeout(() => {
+                        // Zurück zur ursprünglichen Story navigieren
+                        window.history.go(-1);
+                        
+                        // Warte, bis wir zurück sind
+                        setTimeout(() => {
+                            if (document.getElementById('isv-navigation-status')) {
+                                statusIndicator.textContent = `Erfolgreich! Story-ID: ${storyId}`;
+                                
+                                // Kopiere ID in die Zwischenablage
+                                try {
+                                    navigator.clipboard.writeText(storyId).then(() => {
+                                        statusIndicator.textContent = `Erfolgreich! Story-ID: ${storyId} (in Zwischenablage kopiert)`;
+                                    });
+                                } catch (e) {
+                                    console.error("[ISV-DEBUG] Fehler beim Kopieren in die Zwischenablage:", e);
+                                }
+                                
+                                // Nach 5 Sekunden ausblenden
+                                setTimeout(() => {
+                                    if (document.getElementById('isv-navigation-status')) {
+                                        document.getElementById('isv-navigation-status').remove();
+                                    }
+                                }, 5000);
+                            }
+                        }, 1000);
+                    }, 1000);
+                } else {
+                    statusIndicator.textContent = 'Fehler: Keine Story-ID in der neuen URL gefunden!';
+                    statusIndicator.style.background = 'rgba(255, 0, 0, 0.8)';
+                    
+                    // Nach 3 Sekunden ausblenden
+                    setTimeout(() => {
+                        if (document.getElementById('isv-navigation-status')) {
+                            document.getElementById('isv-navigation-status').remove();
+                        }
+                    }, 3000);
+                }
+            }
+        }, 100);
+        
+        // Führe den Klick aus
+        nextButton.click();
+    }
+
+    // Hilfsfunktion zum Finden des Navigationsbuttons
+    function findNavigationButton(direction) {
+        // "next" oder "prev"
+        const isNext = direction === 'next';
+        
+        // Suche nach Button mit aria-label
+        const ariaLabels = isNext ? 
+            ['Weiter', 'Next', 'next', 'Nächste', 'weiter', 'Vor', 'vor'] : 
+            ['Zurück', 'Previous', 'previous', 'Vorherige', 'zurück', 'Zurück zur vorherigen Story'];
+        
+        // Suche nach Button oder SVG mit aria-label
+        for (const label of ariaLabels) {
+            const button = document.querySelector(`button[aria-label="${label}"], [aria-label="${label}"]`);
+            if (button) return button;
+        }
+        
+        // Suche nach Button, der durch Position erkennbar ist
+        const possibleButtons = document.querySelectorAll('button, [role="button"], [tabindex="0"]');
+        
+        for (const btn of possibleButtons) {
+            const rect = btn.getBoundingClientRect();
+            
+            // Ignoriere unsichtbare Elemente
+            if (rect.width === 0 || rect.height === 0) continue;
+            
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            // Eigenschaften, die auf Navigationsbuttons hindeuten
+            const isLeftSide = rect.left < viewportWidth * 0.25;
+            const isRightSide = rect.right > viewportWidth * 0.75;
+            const isTallEnough = rect.height > viewportHeight * 0.3;
+            
+            // Für "next" suchen wir nach einem Button auf der rechten Seite
+            // Für "prev" suchen wir nach einem Button auf der linken Seite
+            if (((isNext && isRightSide) || (!isNext && isLeftSide)) && isTallEnough) {
+                return btn;
+            }
+        }
+        
+        // Suche nach SVG-Elementen, die als Buttons dienen können
+        const svgElements = document.querySelectorAll('svg');
+        for (const svg of svgElements) {
+            const rect = svg.getBoundingClientRect();
+            
+            // Ignoriere unsichtbare Elemente
+            if (rect.width === 0 || rect.height === 0) continue;
+            
+            // Nur größere SVGs betrachten (keine kleinen Icons)
+            if (rect.width < 20 || rect.height < 20) continue;
+            
+            const viewportWidth = window.innerWidth;
+            
+            // Für "next" suchen wir nach einem SVG auf der rechten Seite
+            // Für "prev" suchen wir nach einem SVG auf der linken Seite
+            const isLeftSide = rect.left < viewportWidth * 0.25;
+            const isRightSide = rect.right > viewportWidth * 0.75;
+            
+            if ((isNext && isRightSide) || (!isNext && isLeftSide)) {
+                return svg;
+            }
+        }
+        
+        // Als letzten Versuch - suche nach DIVs, die als Buttons dienen könnten
+        const divs = document.querySelectorAll('div');
+        for (const div of divs) {
+            const rect = div.getBoundingClientRect();
+            
+            // Ignoriere unsichtbare Elemente
+            if (rect.width === 0 || rect.height === 0) continue;
+            
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            // Eigenschaften, die auf Navigationsbuttons hindeuten
+            const isLeftSide = rect.left < viewportWidth * 0.25;
+            const isRightSide = rect.right > viewportWidth * 0.75;
+            const isTallEnough = rect.height > viewportHeight * 0.3;
+            const isWideEnough = rect.width > 50;
+            
+            if (((isNext && isRightSide) || (!isNext && isLeftSide)) && isTallEnough && isWideEnough) {
+                return div;
+            }
+        }
+        
+        // Keine passenden Elemente gefunden
+        return null;
+    }
+
     // Funktion, die den Research-Button zur Seite hinzufügt
     function ensureResearchButtonExists() {
         if (RESEARCH_MODE && !researchButtonAdded && document.body) {
@@ -325,6 +589,10 @@
             // Füge auch den spezifischen ID-Suchbutton hinzu
             addSpecificIdSearchButton();
             logStatus('Spezifischer ID-Suchbutton zur Seite hinzugefügt');
+            
+            // Füge den Navigations-ID-Finder-Button hinzu
+            addNavigationIDFinderButton();
+            logStatus('Navigations-ID-Finder-Button zur Seite hinzugefügt');
         } else if (!document.getElementById('isv-settings-button') && document.body) {
             // Stelle sicher, dass der Einstellungsbutton auch existiert, selbst wenn Research deaktiviert ist
             addSettingsButton();
@@ -334,6 +602,12 @@
             if (!document.getElementById('isv-specific-id-search-button')) {
                 addSpecificIdSearchButton();
                 logStatus('Spezifischer ID-Suchbutton zur Seite hinzugefügt');
+            }
+            
+            // Füge auch den Navigations-ID-Finder-Button hinzu
+            if (!document.getElementById('isv-navigation-id-button')) {
+                addNavigationIDFinderButton();
+                logStatus('Navigations-ID-Finder-Button zur Seite hinzugefügt');
             }
         }
     }
