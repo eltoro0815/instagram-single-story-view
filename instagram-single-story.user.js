@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Instagram Single Story View
 // @namespace    https://github.com/eltoro0815/instagram-single-story-view
-// @version      1.0.40
+// @version      1.0.41
 // @description  Erzwingt die Einzelansicht für Instagram-Stories und verhindert die Karussell-Navigation
 // @author       eltoro0815
 // @match        https://www.instagram.com/stories/*
@@ -21,7 +21,7 @@
     'use strict';
 
     // Konfigurationsvariablen
-    const CHECK_INTERVAL = GM_getValue('CHECK_INTERVAL', 250); // Prüfintervall in ms
+    // const CHECK_INTERVAL = GM_getValue('CHECK_INTERVAL', 250); // Entfernt, da nicht mehr benötigt
     const COOLDOWN = GM_getValue('COOLDOWN', 2000);          // Cooldown zwischen Aktionen in ms
     const BUTTON_ADD_DELAY = 500;                            // Verzögerung beim Hinzufügen des Buttons in ms
     const DEBUG_MODE = true;                                 // Debug-Modus aktivieren
@@ -30,6 +30,8 @@
     let buttonShown = false;
     let lastActionTime = 0;
     let debugInfo = {};
+    let debounceTimer = null;
+    const DEBOUNCE_DELAY = 300; // Verzögerung für Debounce
 
     // Logger-Funktion für wichtige Statusänderungen
     function logStatus(...args) {
@@ -44,12 +46,26 @@
                 timestamp,
                 message: args.join(' ')
             });
+            // Debug-Info nur bei Bedarf aktualisieren
+            if (document.getElementById('isv-debug-panel')) {
+                injectDebugInfo();
+            }
         }
+    }
+
+    // Debounce-Funktion
+    function debounce(func, delay) {
+        return function(...args) {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                func.apply(this, args);
+            }, delay);
+        };
     }
 
     // Debug-Informationen in die Seite einfügen
     function injectDebugInfo() {
-        if (!DEBUG_MODE) return;
+        if (!DEBUG_MODE || !document.body) return;
         
         const existingDebug = document.getElementById('isv-debug-panel');
         if (existingDebug) {
@@ -63,7 +79,7 @@
         debugInfo.isMobileDetected = isMobileDevice();
         debugInfo.url = window.location.href;
         debugInfo.buttonShown = buttonShown;
-        debugInfo.isKarusellViewResult = isKarusellView();
+        // debugInfo.isKarusellViewResult entfernt
         
         const debugPanel = document.createElement('div');
         debugPanel.id = 'isv-debug-panel';
@@ -90,7 +106,7 @@
         debugContent += `<p>Screen: ${debugInfo.screenWidth}x${debugInfo.screenHeight}</p>`;
         debugContent += `<p>Mobile: ${debugInfo.isMobileDetected}</p>`;
         debugContent += `<p>Button shown: ${debugInfo.buttonShown}</p>`;
-        debugContent += `<p>Karusell: ${debugInfo.isKarusellViewResult}</p>`;
+        // debugContent += `<p>Karusell: ${debugInfo.isKarusellViewResult}</p>`; // Entfernt
         debugContent += `<p>URL: ${debugInfo.url.slice(0, 40)}...</p>`;
         
         if (debugInfo.logs && debugInfo.logs.length > 0) {
@@ -124,7 +140,8 @@
         // 4. Media Query Check
         const mqCheck = window.matchMedia("(max-width: 768px)").matches;
         
-        logStatus('DEBUG', `Mobile Detection: UA=${uaCheck}, Viewport=${viewportCheck}, Touch=${touchCheck}, MQ=${mqCheck}`);
+        // Log nur einmal pro Check
+        // logStatus('DEBUG', `Mobile Detection: UA=${uaCheck}, Viewport=${viewportCheck}, Touch=${touchCheck}, MQ=${mqCheck}`);
         
         // Wir betrachten ein Gerät als mobil, wenn mindestens zwei der Checks positiv sind
         const isMobile = [uaCheck, viewportCheck, touchCheck, mqCheck].filter(Boolean).length >= 2;
@@ -184,45 +201,13 @@
         return null;
     }
 
-    // Prüft, ob wir uns in einer Karussell-Ansicht befinden
-    function isKarusellView() {
-        // Suche nach typischen Navigationselementen für Stories
-        const nextStoryBtn = document.querySelector('button[aria-label="Weiter"], button[aria-label="Next"], [aria-label*="next"], [aria-label*="Next"]');
-        const prevStoryBtn = document.querySelector('button[aria-label="Zurück"], button[aria-label="Previous"], [aria-label*="previous"], [aria-label*="Previous"]');
-        
-        if (nextStoryBtn || prevStoryBtn) {
-            // Debug-Info zur gefundenen Navigation
-            if (DEBUG_MODE) {
-                if (nextStoryBtn) {
-                    logStatus('DEBUG', 'Next-Button gefunden:', nextStoryBtn.outerHTML.slice(0, 100));
-                }
-                if (prevStoryBtn) {
-                    logStatus('DEBUG', 'Prev-Button gefunden:', prevStoryBtn.outerHTML.slice(0, 100));
-                }
-            }
-            return true;
-        }
-        
-        // Alternative Erkennung für mobile Seiten
-        const storyNavs = document.querySelectorAll('[role="button"]');
-        for (const nav of storyNavs) {
-            const rect = nav.getBoundingClientRect();
-            // Große Buttons an den Seiten sind wahrscheinlich Story-Navigation
-            if ((rect.left <= 50 || rect.right >= window.innerWidth - 50) && rect.height > 100) {
-                logStatus('DEBUG', 'Alternative Story-Navigation gefunden');
-                return true;
-            }
-        }
-        
-        // Keine Karussell-Indikatoren gefunden
-        return false;
-    }
+    // isKarusellView Funktion entfernt
 
     // Button zum Wechseln zur Einzelansicht
     function addSingleViewButton() {
         // Nicht doppelt hinzufügen
         if (buttonShown || document.getElementById('isv-button')) {
-            logStatus('DEBUG', 'Button bereits vorhanden, wird nicht erneut hinzugefügt');
+            // logStatus('DEBUG', 'Button bereits vorhanden, wird nicht erneut hinzugefügt'); // Weniger Logging
             return;
         }
         
@@ -335,22 +320,10 @@
             }
         });
 
-        // Button sofort hinzufügen (für Debugging)
-        if (DEBUG_MODE) {
-            const testButton = button.cloneNode(true);
-            testButton.id = 'isv-test-button';
-            testButton.style.bottom = '200px';
-            testButton.textContent = 'TEST BUTTON';
-            testButton.addEventListener('click', function(e) {
-                e.stopPropagation();
-                e.preventDefault();
-                alert('Test Button funktioniert!');
-            });
-            document.body.appendChild(testButton);
-            logStatus('DEBUG', 'Test-Button wurde direkt hinzugefügt');
-        }
+        // Test-Button entfernt
+        // Fallback-Button entfernt
 
-        // Button mit Verzögerung hinzufügen, um sicherzustellen, dass alle anderen Elemente bereits geladen sind
+        // Button mit Verzögerung hinzufügen
         setTimeout(() => {
             try {
                 // Button-Container erstellen für bessere z-index-Kontrolle
@@ -372,102 +345,71 @@
                 container.appendChild(button);
                 
                 // Container zum DOM hinzufügen
-                document.body.appendChild(container);
-                
-                buttonShown = true;
-                logStatus('Button wurde verzögert hinzugefügt');
-                
-                // Debug-Informationen in die Seite einfügen
-                injectDebugInfo();
+                if (document.body) {
+                    document.body.appendChild(container);
+                    buttonShown = true;
+                    logStatus('Button wurde verzögert hinzugefügt');
+                    // Debug-Informationen in die Seite einfügen
+                    injectDebugInfo();
+                } else {
+                     logStatus('FEHLER: document.body nicht gefunden beim Hinzufügen des Buttons.');
+                }
+
             } catch (error) {
                 logStatus('FEHLER beim Hinzufügen des Buttons:', error.message);
             }
         }, BUTTON_ADD_DELAY);
-        
-        // Sicherheitsmaßnahme: Button nach längerer Zeit erneut hinzufügen, falls er nicht angezeigt wird
-        setTimeout(() => {
-            if (!document.getElementById('isv-button-container') || !document.getElementById('isv-button')) {
-                logStatus('DEBUG', 'Button nach Timeout nicht gefunden, füge erneut hinzu');
-                try {
-                    const fallbackButton = button.cloneNode(true);
-                    fallbackButton.id = 'isv-fallback-button';
-                    fallbackButton.textContent = 'Zur Einzelansicht (Fallback)';
-                    document.body.appendChild(fallbackButton);
-                    buttonShown = true;
-                    logStatus('Fallback-Button hinzugefügt');
-                    
-                    // Debug-Informationen in die Seite einfügen
-                    injectDebugInfo();
-                } catch (error) {
-                    logStatus('FEHLER beim Hinzufügen des Fallback-Buttons:', error.message);
-                }
-            }
-        }, 3000);
     }
 
     // Entferne den Button
     function removeSingleViewButton() {
         const container = document.getElementById('isv-button-container');
-        const button = document.getElementById('isv-button');
-        const fallbackButton = document.getElementById('isv-fallback-button');
-        const testButton = document.getElementById('isv-test-button');
+        // const fallbackButton = document.getElementById('isv-fallback-button'); // Entfernt
+        // const testButton = document.getElementById('isv-test-button');       // Entfernt
         
         if (container) {
             container.remove();
             logStatus('Button-Container entfernt');
         }
         
+        // Explizit auch den Button entfernen, falls er außerhalb des Containers gelandet ist
+        const button = document.getElementById('isv-button');
         if (button) {
             button.remove();
-            logStatus('Button entfernt');
-        }
-        
-        if (fallbackButton) {
-            fallbackButton.remove();
-            logStatus('Fallback-Button entfernt');
-        }
-        
-        if (testButton) {
-            testButton.remove();
-            logStatus('Test-Button entfernt');
+            logStatus('Direkter Button entfernt');
         }
         
         buttonShown = false;
-        logStatus('Button entfernt');
+        logStatus('Button entfernt (Status)');
+        // Debug-Info aktualisieren
+        injectDebugInfo();
     }
 
     // Prüfe, ob wir auf einer Story-Seite sind und füge ggf. den Button hinzu
-    function checkForStoryAndAddButton() {
-        if (!window.location.pathname.startsWith('/stories/')) {
-            logStatus('Keine Story-Seite');
-            removeSingleViewButton();
-            return;
-        }
-            
-        logStatus('Story-Seite erkannt');
-        
-        // Prüfe, ob es sich um ein Karussell handelt
-        const carousel = isKarusellView();
-        
-        if (carousel) {
-            logStatus('Karussell-Ansicht erkannt');
+    // Wird jetzt gedebounced aufgerufen
+    const debouncedCheckForStoryAndAddButton = debounce(function() {
+        const isOnStoryPage = window.location.pathname.startsWith('/stories/');
+        logStatus('DEBUG', `Debounced Check: isOnStoryPage=${isOnStoryPage}, buttonShown=${buttonShown}`);
+
+        if (isOnStoryPage) {
+            logStatus('Story-Seite erkannt');
             if (!buttonShown) {
-                logStatus('Karussell-Modus: Füge Button hinzu');
+                logStatus('Füge Button hinzu (debounced)');
                 addSingleViewButton();
             }
         } else {
-            logStatus('Einzelansicht erkannt');
+            logStatus('Keine Story-Seite erkannt');
             if (buttonShown) {
-                logStatus('Einzelansicht: Entferne Button');
+                logStatus('Entferne Button (debounced)');
                 removeSingleViewButton();
             }
         }
-        
+
         // Debug-Informationen aktualisieren
         if (DEBUG_MODE && document.body) {
             injectDebugInfo();
         }
-    }
+    }, DEBOUNCE_DELAY);
 
     // Hauptfunktion
     function init() {
@@ -486,12 +428,7 @@
             onReady();
         }
         
-        // Regelmäßige Prüfung, ob der Button hinzugefügt werden muss
-        setInterval(() => {
-            if (window.location.pathname.startsWith('/stories/')) {
-                checkForStoryAndAddButton();
-            }
-        }, CHECK_INTERVAL);
+        // setInterval entfernt
     }
 
     // DOM ist bereit
@@ -499,16 +436,13 @@
         try {
             logStatus('DOM bereit');
             
-            // Prüfe, ob wir auf einer Story-Seite sind
-            if (window.location.href.includes("/stories/")) {
-                logStatus('Story-Seite erkannt, initialisiere...');
-                checkForStoryAndAddButton();
-            }
+            // Initial prüfen
+            debouncedCheckForStoryAndAddButton();
             
             // Überwache URL-Änderungen
             observeUrlChanges();
             
-            // Debug-Informationen anzeigen, wenn im Debug-Modus
+            // Debug-Informationen initial anzeigen
             if (DEBUG_MODE) {
                 injectDebugInfo();
             }
@@ -519,65 +453,49 @@
 
     // Überwache URL-Änderungen
     function observeUrlChanges() {
-        // Überwache Navigation-Events
-        const pushState = history.pushState;
+        let lastUrl = location.href;
+        logStatus('URL Observer gestartet');
+        
+        // Funktion, die bei URL-Änderung aufgerufen wird
+        const handleUrlChange = () => {
+            const currentUrl = location.href;
+            if (currentUrl !== lastUrl) {
+                 logStatus('URL geändert:', currentUrl);
+                 lastUrl = currentUrl;
+                 debouncedCheckForStoryAndAddButton();
+            }
+        };
+
+        // Beobachte history.pushState und history.replaceState
+        const historyPushState = history.pushState;
         history.pushState = function() {
-            pushState.apply(history, arguments);
+            historyPushState.apply(history, arguments);
             handleUrlChange();
         };
-        
+        const historyReplaceState = history.replaceState;
+        history.replaceState = function() {
+            historyReplaceState.apply(history, arguments);
+            handleUrlChange();
+        };
+
+        // Beobachte popstate Event (Zurück/Vorwärts-Button)
         window.addEventListener('popstate', handleUrlChange);
         
-        // Initial aufrufen
+        // Zusätzliche Überwachung mit MutationObserver auf Änderungen im <head> (manche Frameworks ändern die URL ohne Events)
+        if ('MutationObserver' in window && document.head) {
+             const headObserver = new MutationObserver(handleUrlChange);
+             headObserver.observe(document.head, { childList: true, subtree: true });
+             logStatus('Head MutationObserver für URL-Änderungen gestartet');
+        }
+
+        // Initialer Check
         handleUrlChange();
     }
 
-    // Behandle URL-Änderungen
-    function handleUrlChange() {
-        try {
-            const url = window.location.href;
-            logStatus('URL geändert:', url);
-            
-            // Prüfe, ob wir auf einer Story-Seite sind
-            if (url.includes("/stories/")) {
-                logStatus('Story-Seite nach URL-Änderung erkannt');
-                checkForStoryAndAddButton();
-            }
-        } catch (error) {
-            logStatus('Fehler in handleUrlChange:', error.message);
-        }
-    }
-
-    // Überwache DOM-Mutationen für dynamische Änderungen
-    function observeDOMChanges() {
-        if (!('MutationObserver' in window)) {
-            logStatus('MutationObserver wird von diesem Browser nicht unterstützt');
-            return;
-        }
-        
-        const observer = new MutationObserver(function(mutations) {
-            // Wir überprüfen, ob wir auf einer Story-Seite sind und der Button hinzugefügt werden sollte
-            if (window.location.pathname.startsWith('/stories/')) {
-                checkForStoryAndAddButton();
-            }
-        });
-        
-        // Konfiguration des Observers: Beobachte Änderungen am DOM
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-        
-        logStatus('DOM-Mutation Observer gestartet');
-    }
+    // observeDOMChanges Funktion entfernt
 
     // Skript starten
     init();
     
-    // Starte den DOM-Observer, sobald der Body verfügbar ist
-    if (document.body) {
-        observeDOMChanges();
-    } else {
-        window.addEventListener('DOMContentLoaded', observeDOMChanges);
-    }
+    // DOM Observer nicht mehr benötigt
 })(); 
