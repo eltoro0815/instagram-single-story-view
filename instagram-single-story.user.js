@@ -14,6 +14,7 @@
     'use strict';
 
     // Konfiguration
+   //
     const RETRY_INTERVAL = 100; // ms
     const MAX_RETRIES = 50;
 
