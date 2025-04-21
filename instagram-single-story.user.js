@@ -8,7 +8,9 @@
 // @match        *://*.instagram.com/stories/*
 // @match        https://www.instagram.com/*
 // @match        *://*.instagram.com/*
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // @updateURL    https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js
 // @downloadURL  https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js
 // @run-at       document-start
@@ -16,13 +18,24 @@
 
 (function () {
     'use strict';
-    // test hook
-    // Konfiguration
-    const DEBUG = true;               // Ausführliche Logs in der Konsole
-    const CHECK_INTERVAL = 250;       // Prüfintervall in ms
-    const COOLDOWN = 2000;            // Cooldown zwischen Aktionen in ms
-    const RESEARCH_MODE = true;       // Aktiviert den Research-Modus
-    const FORCE_RESEARCH = true;      // Erzwingt die Durchführung des Research-Modus bei jedem Seitenaufruf
+
+    // Konfiguration aus GM_getValue mit Standardwerten
+    const getConfig = (key, defaultValue) => {
+        return GM_getValue(key, defaultValue);
+    };
+
+    // Konfiguration speichern
+    const saveConfig = (key, value) => {
+        GM_setValue(key, value);
+        return value;
+    };
+
+    // Konfigurationsvariablen
+    let DEBUG = getConfig('DEBUG', true);                // Ausführliche Logs in der Konsole
+    let CHECK_INTERVAL = getConfig('CHECK_INTERVAL', 250); // Prüfintervall in ms
+    let COOLDOWN = getConfig('COOLDOWN', 2000);          // Cooldown zwischen Aktionen in ms
+    let RESEARCH_MODE = getConfig('RESEARCH_MODE', true); // Aktiviert den Research-Modus
+    let FORCE_RESEARCH = getConfig('FORCE_RESEARCH', true); // Erzwingt die Durchführung des Research-Modus
 
     // Status-Tracking
     let buttonShown = false;
@@ -824,6 +837,147 @@
             setTimeout(checkForStoryAndAddButton, 500);
         });
     }
+
+    // Einstellungen-Dialog zum Bearbeiten der Konfiguration
+    const createSettingsUI = () => {
+        // Entferne vorhandenen Dialog, falls vorhanden
+        const existingDialog = document.getElementById('isv-settings');
+        if (existingDialog) existingDialog.remove();
+        
+        // Dialog erstellen
+        const dialog = document.createElement('div');
+        dialog.id = 'isv-settings';
+        dialog.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            padding: 20px;
+            z-index: 9999999;
+            width: 400px;
+            font-family: Arial, sans-serif;
+            color: #333;
+        `;
+        
+        // Titel
+        const title = document.createElement('h2');
+        title.textContent = 'Instagram Single Story View - Einstellungen';
+        title.style.cssText = `
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        `;
+        dialog.appendChild(title);
+        
+        // Einstellungen erstellen
+        const createSetting = (id, label, value, type = 'checkbox') => {
+            const container = document.createElement('div');
+            container.style.cssText = 'margin-bottom: 15px;';
+            
+            const labelEl = document.createElement('label');
+            labelEl.setAttribute('for', id);
+            labelEl.style.cssText = 'display: block; margin-bottom: 5px; font-weight: bold;';
+            labelEl.textContent = label;
+            
+            const input = document.createElement('input');
+            input.id = id;
+            input.type = type;
+            if (type === 'checkbox') {
+                input.checked = value;
+                input.style.cssText = 'margin-right: 10px;';
+            } else {
+                input.value = value;
+                input.style.cssText = 'width: 100%; padding: 5px; box-sizing: border-box;';
+            }
+            
+            container.appendChild(labelEl);
+            container.appendChild(input);
+            return container;
+        };
+        
+        // Einstellungen hinzufügen
+        dialog.appendChild(createSetting('isv-debug', 'Debug-Modus aktivieren', DEBUG));
+        dialog.appendChild(createSetting('isv-check-interval', 'Prüfintervall (ms)', CHECK_INTERVAL, 'number'));
+        dialog.appendChild(createSetting('isv-cooldown', 'Cooldown zwischen Aktionen (ms)', COOLDOWN, 'number'));
+        dialog.appendChild(createSetting('isv-research-mode', 'Research-Modus aktivieren', RESEARCH_MODE));
+        dialog.appendChild(createSetting('isv-force-research', 'Research-Modus bei jedem Seitenaufruf ausführen', FORCE_RESEARCH));
+        
+        // Buttons
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.style.cssText = 'display: flex; justify-content: flex-end; margin-top: 20px;';
+        
+        const cancelButton = document.createElement('button');
+        cancelButton.textContent = 'Abbrechen';
+        cancelButton.style.cssText = `
+            padding: 8px 15px;
+            margin-right: 10px;
+            border: none;
+            background: #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        `;
+        cancelButton.onclick = () => dialog.remove();
+        
+        const saveButton = document.createElement('button');
+        saveButton.textContent = 'Speichern';
+        saveButton.style.cssText = `
+            padding: 8px 15px;
+            border: none;
+            background: #5a32a3;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        `;
+        saveButton.onclick = () => {
+            // Einstellungen speichern
+            DEBUG = saveConfig('DEBUG', document.getElementById('isv-debug').checked);
+            CHECK_INTERVAL = saveConfig('CHECK_INTERVAL', parseInt(document.getElementById('isv-check-interval').value) || 250);
+            COOLDOWN = saveConfig('COOLDOWN', parseInt(document.getElementById('isv-cooldown').value) || 2000);
+            RESEARCH_MODE = saveConfig('RESEARCH_MODE', document.getElementById('isv-research-mode').checked);
+            FORCE_RESEARCH = saveConfig('FORCE_RESEARCH', document.getElementById('isv-force-research').checked);
+            
+            // Dialog schließen
+            dialog.remove();
+            
+            // Benachrichtigung anzeigen
+            const notification = document.createElement('div');
+            notification.textContent = 'Einstellungen gespeichert!';
+            notification.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                background: rgba(90, 50, 163, 0.9);
+                color: white;
+                padding: 10px 15px;
+                border-radius: 4px;
+                z-index: 999999;
+                font-family: Arial, sans-serif;
+            `;
+            document.body.appendChild(notification);
+            
+            // Nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.5s';
+                setTimeout(() => notification.remove(), 500);
+            }, 3000);
+        };
+        
+        buttonsContainer.appendChild(cancelButton);
+        buttonsContainer.appendChild(saveButton);
+        dialog.appendChild(buttonsContainer);
+        
+        // Dialog zum DOM hinzufügen
+        document.body.appendChild(dialog);
+    };
+    
+    // Menüeintrag in Tampermonkey registrieren
+    GM_registerMenuCommand('Instagram Single Story View - Einstellungen', createSettingsUI);
 
     // Skript starten
     init();
