@@ -565,43 +565,6 @@
         return null;
     }
 
-    // Analysiere Media-Source-Attribute nach Story-IDs
-    function analyzeMediaSourcesForStoryIds() {
-        const mediaElements = document.querySelectorAll('img[src], img[srcset], video source, video');
-        const storyIds = new Map(); // Verwende Map für Eindeutigkeit und Häufigkeitszählung
-        
-        mediaElements.forEach(el => {
-            const src = el.getAttribute('src') || el.getAttribute('srcset') || '';
-            if (!src) return;
-            
-            // Suche nach Story-ID in der Medien-URL
-            const storyIdMatch = src.match(/\/stories\/[^\/]+\/(\d+)/);
-            if (storyIdMatch && storyIdMatch[1]) {
-                const id = storyIdMatch[1];
-                // Prüfe ausschließlich auf korrekte Länge (19 Stellen)
-                if (id.length === 19) {
-                    // Zähle Häufigkeit des Vorkommens
-                    storyIds.set(id, (storyIds.get(id) || 0) + 1);
-                    console.log("[ISV-DEBUG] Gültige Story-ID in Medien-URL gefunden:", id, "Quelle:", src);
-                } else {
-                    console.warn("[ISV-DEBUG] Ungültige Story-ID mit falscher Länge in Medien-URL (muss 19 Stellen haben):", id, "Quelle:", src);
-                }
-            } else {
-                // Alternative Methode: Suche nach langen Zahlen in der URL
-                const numberMatches = src.match(/(\d{19})/g) || []; // Nur noch exakt 19-stellige Zahlen suchen
-                numberMatches.forEach(num => {
-                    console.log("[ISV-DEBUG] Gültige Story-ID in Medien-URL gefunden:", num, "Quelle:", src);
-                    storyIds.set(num, (storyIds.get(num) || 0) + 1);
-                });
-            }
-        });
-        
-        // Konvertiere zu Array und sortiere nach Häufigkeit (häufigere IDs priorisieren)
-        return Array.from(storyIds.entries())
-            .sort((a, b) => b[1] - a[1])
-            .map(entry => entry[0]);
-    }
-
     // Neue Funktion für tiefe DOM-Suche nach Story-IDs
     function searchDOMForStoryIds() {
         console.log("[ISV-DEBUG] Führe tiefe DOM-Suche nach Story-IDs durch");
@@ -970,7 +933,7 @@
         if (document.getElementById('isv-id-list-button')) {
             return;
         }
-
+        
         log('Füge Story-ID-Liste-Button hinzu');
 
         // Button erstellen
@@ -1033,37 +996,16 @@
                 idList += '\n';
             }
             
-            // 3. Analysiere Medien-Quellen
-            const mediaStoryIds = analyzeMediaSourcesForStoryIds();
-            if (mediaStoryIds.length > 0) {
-                idList += 'Medien-Quellen:\n';
-                mediaStoryIds.forEach((id, index) => {
-                    idList += `- ${id}${index === 0 ? ' (Primäre ID)' : ''}\n`;
+            // 3. DOM-Tiefensuche durchführen
+            const domIds = searchDOMForStoryIds();
+            if (domIds.length > 0) {
+                idList += 'DOM-Suche:\n';
+                domIds.forEach((id, index) => {
+                    idList += `- ${id}${index === 0 ? ' (Höchste Relevanz)' : ''}\n`;
                 });
                 idList += '\n';
             } else {
-                idList += 'Keine IDs in Medien-Quellen gefunden\n\n';
-            }
-            
-            // 4. In DOM nach data-* Attributen suchen
-            const elementsWithDataAttr = document.querySelectorAll('[data-id], [data-item-id], [data-media-id]');
-            let dataIdsFound = false;
-            
-            for (const el of elementsWithDataAttr) {
-                const dataId = el.getAttribute('data-id') || el.getAttribute('data-item-id') || 
-                            el.getAttribute('data-media-id') || '';
-                
-                if (dataId && dataId.length === 19) {
-                    if (!dataIdsFound) {
-                        idList += 'Data-Attribute:\n';
-                        dataIdsFound = true;
-                    }
-                    idList += `- ${dataId}\n`;
-                }
-            }
-            
-            if (!dataIdsFound) {
-                idList += 'Keine IDs in data-Attributen gefunden\n';
+                idList += 'Keine IDs in der DOM-Suche gefunden\n\n';
             }
             
             // Zeige das Ergebnis in einem Alert an
