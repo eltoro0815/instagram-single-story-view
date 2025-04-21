@@ -67,7 +67,7 @@
             z-index: 9999999;
             width: 400px;
             font-family: Arial, sans-serif;
-            color: #333;
+            color: #121212; /* Dunklerer Text für bessere Lesbarkeit */
         `;
         
         // Titel
@@ -77,8 +77,10 @@
             margin-top: 0;
             margin-bottom: 15px;
             font-size: 18px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #ccc;
             padding-bottom: 10px;
+            color: #000; /* Schwarzer Text für den Titel */
+            font-weight: bold;
         `;
         dialog.appendChild(title);
         
@@ -89,7 +91,7 @@
             
             const labelEl = document.createElement('label');
             labelEl.setAttribute('for', id);
-            labelEl.style.cssText = 'display: block; margin-bottom: 5px; font-weight: bold;';
+            labelEl.style.cssText = 'display: block; margin-bottom: 5px; font-weight: bold; color: #000;'; /* Schwarzer Text für Labels */
             labelEl.textContent = label;
             
             const input = document.createElement('input');
@@ -97,10 +99,10 @@
             input.type = type;
             if (type === 'checkbox') {
                 input.checked = value;
-                input.style.cssText = 'margin-right: 10px;';
+                input.style.cssText = 'margin-right: 10px; transform: scale(1.2);'; /* Größere Checkbox */
             } else {
                 input.value = value;
-                input.style.cssText = 'width: 100%; padding: 5px; box-sizing: border-box;';
+                input.style.cssText = 'width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #aaa; color: #000; background: #fff;'; /* Bessere Eingabefelder */
             }
             
             container.appendChild(labelEl);
@@ -125,9 +127,11 @@
             padding: 8px 15px;
             margin-right: 10px;
             border: none;
-            background: #ccc;
+            background: #ddd;
+            color: #333;
             border-radius: 4px;
             cursor: pointer;
+            font-weight: bold;
         `;
         cancelButton.onclick = () => dialog.remove();
         
@@ -140,6 +144,7 @@
             color: white;
             border-radius: 4px;
             cursor: pointer;
+            font-weight: bold;
         `;
         saveButton.onclick = () => {
             // Einstellungen speichern
@@ -165,6 +170,8 @@
                 border-radius: 4px;
                 z-index: 999999;
                 font-family: Arial, sans-serif;
+                font-weight: bold;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             `;
             document.body.appendChild(notification);
             
