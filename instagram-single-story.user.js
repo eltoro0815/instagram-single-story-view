@@ -484,7 +484,10 @@
         if (researchDone && !FORCE_RESEARCH) return;
 
         try {
-            console.clear(); // Konsole leeren für bessere Übersicht
+            // console.clear(); // Konsole leeren für bessere Übersicht
+            console.log("[ISV-DEBUG] --------------------------------------------------------");
+            console.log("[ISV-DEBUG] BEGINN DER RESEARCH-AUSGABEN - FRÜHERE AUSGABEN BLEIBEN ERHALTEN");
+            console.log("[ISV-DEBUG] --------------------------------------------------------");
 
             // Zurücksetzen der Research-Daten
             window.isvResearchData = [];
@@ -709,19 +712,21 @@
         if (matches.length > 0) {
             console.log("[ISV-DEBUG] Gefundene lange Zahlen in URL:", matches);
             
-            // Filtere ungültige IDs heraus (beginnend mit 13)
-            const validIds = matches.filter(id => id.length >= 15 && !id.startsWith('13'));
-            const invalidIds = matches.filter(id => id.length >= 15 && id.startsWith('13'));
+            // Validiere IDs basierend ausschließlich auf Länge (19 Stellen)
+            const validIds = matches.filter(id => id.length === 19);
+            const invalidLengthIds = matches.filter(id => id.length !== 19 && id.length >= 15);
             
-            if (invalidIds.length > 0) {
-                console.warn("[ISV-DEBUG] Ungültige IDs gefunden (beginnend mit 13):", invalidIds);
+            if (invalidLengthIds.length > 0) {
+                console.warn("[ISV-DEBUG] IDs mit falscher Länge gefunden (ignoriere alle außer 19 Stellen):", invalidLengthIds);
             }
             
             if (validIds.length > 0) {
-                console.log("[ISV-DEBUG] Mögliche gültige Story-IDs:", validIds);
-                // Bevorzuge längere IDs (neueres Format von Instagram)
-                return validIds.sort((a, b) => b.length - a.length)[0];
+                console.log("[ISV-DEBUG] Gültige Story-IDs (19 Stellen):", validIds);
+                return validIds[0]; // Nimm die erste gültige ID
             }
+            
+            // Kein Fallback mehr für kürzere IDs - nur noch 19-stellige IDs sind gültig
+            console.log("[ISV-DEBUG] Keine 19-stellige Story-ID gefunden. Keine gültige ID verfügbar.");
         }
         
         return null;
@@ -740,21 +745,20 @@
             const storyIdMatch = src.match(/\/stories\/[^\/]+\/(\d+)/);
             if (storyIdMatch && storyIdMatch[1]) {
                 const id = storyIdMatch[1];
-                if (id.length >= 15 && !id.startsWith('13')) {
+                // Prüfe ausschließlich auf korrekte Länge (19 Stellen)
+                if (id.length === 19) {
                     // Zähle Häufigkeit des Vorkommens
                     storyIds.set(id, (storyIds.get(id) || 0) + 1);
-                    console.log("[ISV-DEBUG] Story-ID in Medien-URL gefunden:", id, "Quelle:", src);
-                } else if (id.startsWith('13')) {
-                    console.warn("[ISV-DEBUG] Ungültige Story-ID in Medien-URL (beginnt mit 13):", id, "Quelle:", src);
+                    console.log("[ISV-DEBUG] Gültige Story-ID in Medien-URL gefunden:", id, "Quelle:", src);
+                } else {
+                    console.warn("[ISV-DEBUG] Ungültige Story-ID mit falscher Länge in Medien-URL (muss 19 Stellen haben):", id, "Quelle:", src);
                 }
             } else {
                 // Alternative Methode: Suche nach langen Zahlen in der URL
-                const numberMatches = src.match(/(\d{15,25})/g) || [];
+                const numberMatches = src.match(/(\d{19})/g) || []; // Nur noch exakt 19-stellige Zahlen suchen
                 numberMatches.forEach(num => {
-                    if (!num.startsWith('13')) {
-                        console.log("[ISV-DEBUG] Mögliche Story-ID in Medien-URL:", num, "Quelle:", src);
-                        storyIds.set(num, (storyIds.get(num) || 0) + 1);
-                    }
+                    console.log("[ISV-DEBUG] Gültige Story-ID in Medien-URL gefunden:", num, "Quelle:", src);
+                    storyIds.set(num, (storyIds.get(num) || 0) + 1);
                 });
             }
         });
@@ -802,8 +806,8 @@
             const dataId = el.getAttribute('data-id') || el.getAttribute('data-item-id') || 
                           el.getAttribute('data-media-id') || '';
             
-            if (dataId && dataId.length >= 15 && !dataId.startsWith('13')) {
-                console.log("[ISV-DEBUG] Story-ID aus data-Attribut gefunden:", dataId);
+            if (dataId && dataId.length === 19) {
+                console.log("[ISV-DEBUG] Gültige Story-ID aus data-Attribut gefunden:", dataId);
                 return dataId;
             }
         }
