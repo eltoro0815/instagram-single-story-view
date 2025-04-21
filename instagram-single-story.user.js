@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Instagram Single Story View
 // @namespace    https://github.com/eltoro0815/instagram-single-story-view
-// @version      1.0.39
+// @version      1.0.40
 // @description  Erzwingt die Einzelansicht für Instagram-Stories und verhindert die Karussell-Navigation
 // @author       eltoro0815
 // @match        https://www.instagram.com/stories/*
@@ -24,22 +24,112 @@
     const CHECK_INTERVAL = GM_getValue('CHECK_INTERVAL', 250); // Prüfintervall in ms
     const COOLDOWN = GM_getValue('COOLDOWN', 2000);          // Cooldown zwischen Aktionen in ms
     const BUTTON_ADD_DELAY = 500;                            // Verzögerung beim Hinzufügen des Buttons in ms
+    const DEBUG_MODE = true;                                 // Debug-Modus aktivieren
     
     // Status-Tracking
     let buttonShown = false;
     let lastActionTime = 0;
+    let debugInfo = {};
 
     // Logger-Funktion für wichtige Statusänderungen
     function logStatus(...args) {
+        if (args[0] === 'DEBUG' && !DEBUG_MODE) return;
         console.log('[ISV]', ...args);
+        
+        // In DEBUG_MODE speichern wir zusätzliche Informationen
+        if (DEBUG_MODE) {
+            const timestamp = new Date().toISOString();
+            if (!debugInfo.logs) debugInfo.logs = [];
+            debugInfo.logs.push({
+                timestamp,
+                message: args.join(' ')
+            });
+        }
     }
 
-    // Überprüfen, ob es sich um ein mobiles Gerät handelt
+    // Debug-Informationen in die Seite einfügen
+    function injectDebugInfo() {
+        if (!DEBUG_MODE) return;
+        
+        const existingDebug = document.getElementById('isv-debug-panel');
+        if (existingDebug) {
+            existingDebug.remove();
+        }
+        
+        // Aktuelle Device-Informationen sammeln
+        debugInfo.userAgent = navigator.userAgent;
+        debugInfo.screenWidth = window.innerWidth;
+        debugInfo.screenHeight = window.innerHeight;
+        debugInfo.isMobileDetected = isMobileDevice();
+        debugInfo.url = window.location.href;
+        debugInfo.buttonShown = buttonShown;
+        debugInfo.isKarusellViewResult = isKarusellView();
+        
+        const debugPanel = document.createElement('div');
+        debugPanel.id = 'isv-debug-panel';
+        debugPanel.style.cssText = `
+            position: fixed;
+            bottom: 10px;
+            left: 10px;
+            z-index: 2147483646;
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            border: 1px solid #0f0;
+            border-radius: 4px;
+            padding: 8px;
+            font-size: 10px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 280px;
+            pointer-events: auto;
+        `;
+        
+        let debugContent = `<p>ISV Debug v${GM_info.script.version}</p>`;
+        debugContent += `<p>UA: ${debugInfo.userAgent.slice(0, 50)}...</p>`;
+        debugContent += `<p>Screen: ${debugInfo.screenWidth}x${debugInfo.screenHeight}</p>`;
+        debugContent += `<p>Mobile: ${debugInfo.isMobileDetected}</p>`;
+        debugContent += `<p>Button shown: ${debugInfo.buttonShown}</p>`;
+        debugContent += `<p>Karusell: ${debugInfo.isKarusellViewResult}</p>`;
+        debugContent += `<p>URL: ${debugInfo.url.slice(0, 40)}...</p>`;
+        
+        if (debugInfo.logs && debugInfo.logs.length > 0) {
+            debugContent += `<p>---Logs (${debugInfo.logs.length})---</p>`;
+            debugInfo.logs.slice(-10).forEach(log => {
+                debugContent += `<p>${log.timestamp.slice(11, 19)}: ${log.message}</p>`;
+            });
+        }
+        
+        debugPanel.innerHTML = debugContent;
+        document.body.appendChild(debugPanel);
+        
+        // Klick-Handler zum Anzeigen aller Logs
+        debugPanel.addEventListener('click', function() {
+            console.log('ISV Full Debug Info:', debugInfo);
+            alert('Debug-Infos wurden in die Konsole geschrieben');
+        });
+    }
+
+    // Überprüfen, ob es sich um ein mobiles Gerät handelt (verbesserte Version)
     function isMobileDevice() {
-        return (
-            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-            window.innerWidth <= 768
-        );
+        // 1. User-Agent Check
+        const uaCheck = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        // 2. Viewport-Breite Check
+        const viewportCheck = window.innerWidth <= 768;
+        
+        // 3. Touch Points Check
+        const touchCheck = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        // 4. Media Query Check
+        const mqCheck = window.matchMedia("(max-width: 768px)").matches;
+        
+        logStatus('DEBUG', `Mobile Detection: UA=${uaCheck}, Viewport=${viewportCheck}, Touch=${touchCheck}, MQ=${mqCheck}`);
+        
+        // Wir betrachten ein Gerät als mobil, wenn mindestens zwei der Checks positiv sind
+        const isMobile = [uaCheck, viewportCheck, touchCheck, mqCheck].filter(Boolean).length >= 2;
+        
+        return isMobile;
     }
 
     // Hilfsfunktionen
@@ -101,7 +191,27 @@
         const prevStoryBtn = document.querySelector('button[aria-label="Zurück"], button[aria-label="Previous"], [aria-label*="previous"], [aria-label*="Previous"]');
         
         if (nextStoryBtn || prevStoryBtn) {
+            // Debug-Info zur gefundenen Navigation
+            if (DEBUG_MODE) {
+                if (nextStoryBtn) {
+                    logStatus('DEBUG', 'Next-Button gefunden:', nextStoryBtn.outerHTML.slice(0, 100));
+                }
+                if (prevStoryBtn) {
+                    logStatus('DEBUG', 'Prev-Button gefunden:', prevStoryBtn.outerHTML.slice(0, 100));
+                }
+            }
             return true;
+        }
+        
+        // Alternative Erkennung für mobile Seiten
+        const storyNavs = document.querySelectorAll('[role="button"]');
+        for (const nav of storyNavs) {
+            const rect = nav.getBoundingClientRect();
+            // Große Buttons an den Seiten sind wahrscheinlich Story-Navigation
+            if ((rect.left <= 50 || rect.right >= window.innerWidth - 50) && rect.height > 100) {
+                logStatus('DEBUG', 'Alternative Story-Navigation gefunden');
+                return true;
+            }
         }
         
         // Keine Karussell-Indikatoren gefunden
@@ -112,6 +222,7 @@
     function addSingleViewButton() {
         // Nicht doppelt hinzufügen
         if (buttonShown || document.getElementById('isv-button')) {
+            logStatus('DEBUG', 'Button bereits vorhanden, wird nicht erneut hinzugefügt');
             return;
         }
         
@@ -149,6 +260,11 @@
                 font-size: 14px;
                 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
                 pointer-events: auto !important;
+                opacity: 1;
+                max-width: 90%;
+                overflow: visible;
+                display: block !important;
+                visibility: visible !important;
             `;
         } else {
             button.style.cssText = `
@@ -166,6 +282,9 @@
                 font-family: Arial, sans-serif;
                 transition: opacity 0.3s;
                 pointer-events: auto !important;
+                opacity: 1;
+                display: block !important;
+                visibility: visible !important;
             `;
         }
 
@@ -175,13 +294,14 @@
             e.stopPropagation();
             e.preventDefault();
             
+            logStatus('Button geklickt');
+            
             const now = Date.now();
             if (now - lastActionTime < COOLDOWN) {
                 logStatus(`Aktion zu schnell nach letzter Aktion. Warte ${COOLDOWN}ms.`);
                 return;
             }
 
-            logStatus('Button geklickt');
             button.disabled = true;
             button.style.opacity = '0.5';
             button.textContent = 'Wird geladen...';
@@ -215,40 +335,105 @@
             }
         });
 
+        // Button sofort hinzufügen (für Debugging)
+        if (DEBUG_MODE) {
+            const testButton = button.cloneNode(true);
+            testButton.id = 'isv-test-button';
+            testButton.style.bottom = '200px';
+            testButton.textContent = 'TEST BUTTON';
+            testButton.addEventListener('click', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                alert('Test Button funktioniert!');
+            });
+            document.body.appendChild(testButton);
+            logStatus('DEBUG', 'Test-Button wurde direkt hinzugefügt');
+        }
+
         // Button mit Verzögerung hinzufügen, um sicherzustellen, dass alle anderen Elemente bereits geladen sind
         setTimeout(() => {
-            // Button-Container erstellen für bessere z-index-Kontrolle
-            const container = document.createElement('div');
-            container.id = 'isv-button-container';
-            container.style.cssText = `
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                z-index: ${zIndexValue - 1};
-                pointer-events: none;
-            `;
-            
-            // Button zum Container hinzufügen
-            container.appendChild(button);
-            
-            // Container zum DOM hinzufügen
-            document.body.appendChild(container);
-            
-            buttonShown = true;
-            logStatus('Button wurde verzögert hinzugefügt');
+            try {
+                // Button-Container erstellen für bessere z-index-Kontrolle
+                const container = document.createElement('div');
+                container.id = 'isv-button-container';
+                container.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    z-index: ${zIndexValue - 1};
+                    pointer-events: none;
+                    display: block !important;
+                    visibility: visible !important;
+                `;
+                
+                // Button zum Container hinzufügen
+                container.appendChild(button);
+                
+                // Container zum DOM hinzufügen
+                document.body.appendChild(container);
+                
+                buttonShown = true;
+                logStatus('Button wurde verzögert hinzugefügt');
+                
+                // Debug-Informationen in die Seite einfügen
+                injectDebugInfo();
+            } catch (error) {
+                logStatus('FEHLER beim Hinzufügen des Buttons:', error.message);
+            }
         }, BUTTON_ADD_DELAY);
+        
+        // Sicherheitsmaßnahme: Button nach längerer Zeit erneut hinzufügen, falls er nicht angezeigt wird
+        setTimeout(() => {
+            if (!document.getElementById('isv-button-container') || !document.getElementById('isv-button')) {
+                logStatus('DEBUG', 'Button nach Timeout nicht gefunden, füge erneut hinzu');
+                try {
+                    const fallbackButton = button.cloneNode(true);
+                    fallbackButton.id = 'isv-fallback-button';
+                    fallbackButton.textContent = 'Zur Einzelansicht (Fallback)';
+                    document.body.appendChild(fallbackButton);
+                    buttonShown = true;
+                    logStatus('Fallback-Button hinzugefügt');
+                    
+                    // Debug-Informationen in die Seite einfügen
+                    injectDebugInfo();
+                } catch (error) {
+                    logStatus('FEHLER beim Hinzufügen des Fallback-Buttons:', error.message);
+                }
+            }
+        }, 3000);
     }
 
     // Entferne den Button
     function removeSingleViewButton() {
         const container = document.getElementById('isv-button-container');
+        const button = document.getElementById('isv-button');
+        const fallbackButton = document.getElementById('isv-fallback-button');
+        const testButton = document.getElementById('isv-test-button');
+        
         if (container) {
             container.remove();
-            buttonShown = false;
+            logStatus('Button-Container entfernt');
+        }
+        
+        if (button) {
+            button.remove();
             logStatus('Button entfernt');
         }
+        
+        if (fallbackButton) {
+            fallbackButton.remove();
+            logStatus('Fallback-Button entfernt');
+        }
+        
+        if (testButton) {
+            testButton.remove();
+            logStatus('Test-Button entfernt');
+        }
+        
+        buttonShown = false;
+        logStatus('Button entfernt');
     }
 
     // Prüfe, ob wir auf einer Story-Seite sind und füge ggf. den Button hinzu
@@ -277,11 +462,20 @@
                 removeSingleViewButton();
             }
         }
+        
+        // Debug-Informationen aktualisieren
+        if (DEBUG_MODE && document.body) {
+            injectDebugInfo();
+        }
     }
 
     // Hauptfunktion
     function init() {
         logStatus('Initialisiere');
+        
+        // Skript-Informationen loggen
+        logStatus('Version:', GM_info.script.version);
+        logStatus('UserAgent:', navigator.userAgent);
         
         // Wenn DOM noch nicht geladen, warten
         if (document.readyState === 'loading') {
@@ -291,6 +485,13 @@
             logStatus('Dokument bereits geladen');
             onReady();
         }
+        
+        // Regelmäßige Prüfung, ob der Button hinzugefügt werden muss
+        setInterval(() => {
+            if (window.location.pathname.startsWith('/stories/')) {
+                checkForStoryAndAddButton();
+            }
+        }, CHECK_INTERVAL);
     }
 
     // DOM ist bereit
@@ -306,6 +507,11 @@
             
             // Überwache URL-Änderungen
             observeUrlChanges();
+            
+            // Debug-Informationen anzeigen, wenn im Debug-Modus
+            if (DEBUG_MODE) {
+                injectDebugInfo();
+            }
         } catch (error) {
             logStatus('Fehler in onReady:', error.message);
         }
@@ -342,6 +548,36 @@
         }
     }
 
+    // Überwache DOM-Mutationen für dynamische Änderungen
+    function observeDOMChanges() {
+        if (!('MutationObserver' in window)) {
+            logStatus('MutationObserver wird von diesem Browser nicht unterstützt');
+            return;
+        }
+        
+        const observer = new MutationObserver(function(mutations) {
+            // Wir überprüfen, ob wir auf einer Story-Seite sind und der Button hinzugefügt werden sollte
+            if (window.location.pathname.startsWith('/stories/')) {
+                checkForStoryAndAddButton();
+            }
+        });
+        
+        // Konfiguration des Observers: Beobachte Änderungen am DOM
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        logStatus('DOM-Mutation Observer gestartet');
+    }
+
     // Skript starten
     init();
+    
+    // Starte den DOM-Observer, sobald der Body verfügbar ist
+    if (document.body) {
+        observeDOMChanges();
+    } else {
+        window.addEventListener('DOMContentLoaded', observeDOMChanges);
+    }
 })(); 
