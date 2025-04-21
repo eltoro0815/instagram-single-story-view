@@ -24,7 +24,7 @@
     // const CHECK_INTERVAL = GM_getValue('CHECK_INTERVAL', 250); // Entfernt, da nicht mehr benötigt
     const COOLDOWN = GM_getValue('COOLDOWN', 2000);          // Cooldown zwischen Aktionen in ms
     const BUTTON_ADD_DELAY = 500;                            // Verzögerung beim Hinzufügen des Buttons in ms
-    const DEBUG_MODE = true;                                 // Debug-Modus aktivieren
+    const DEBUG_MODE = false;                                 // Debug-Modus aktivieren
     
     // Status-Tracking
     let buttonShown = false;
