@@ -602,50 +602,29 @@
             .map(entry => entry[0]);
     }
 
-    // Diese Funktion modifiziert die extractStoryId Funktion, um sicherzustellen,
-    // dass sie nie eine ID zurückgibt, die mit '13' beginnt
+    // Neue Funktion, die nur die ID aus dem og:url Meta-Tag extrahiert
     function extractStoryId() {
-        // Analysiere die aktuelle URL für Story-IDs
-        const urlStoryId = analyzeUrlForStoryIds(window.location.href);
-        if (urlStoryId) {
-            console.log("[ISV-DEBUG] Story-ID aus URL extrahiert:", urlStoryId);
-            return urlStoryId;
+        // Nur in og:url Meta-Tag suchen
+        const ogUrlMeta = document.querySelector('meta[property="og:url"], meta[name="og:url"]');
+        
+        if (!ogUrlMeta) {
+            console.log("[ISV-DEBUG] Kein og:url Meta-Tag gefunden");
+            return null;
         }
         
-        // Suche in Meta-Tags
-        const metaTags = document.querySelectorAll('meta[property^="og:"], meta[name^="og:"]');
-        for (const meta of metaTags) {
-            const content = meta.getAttribute('content') || '';
-            if (!content) continue;
-            
-            const metaStoryId = analyzeUrlForStoryIds(content);
-            if (metaStoryId) {
-                console.log("[ISV-DEBUG] Story-ID aus Meta-Tag extrahiert:", metaStoryId);
-                return metaStoryId;
-            }
+        const content = ogUrlMeta.getAttribute('content') || '';
+        if (!content) {
+            console.log("[ISV-DEBUG] og:url Meta-Tag hat keinen Inhalt");
+            return null;
         }
         
-        // Analysiere Medien-Quellen
-        const mediaStoryIds = analyzeMediaSourcesForStoryIds();
-        if (mediaStoryIds.length > 0) {
-            console.log("[ISV-DEBUG] Story-ID aus Medien-Quellen extrahiert:", mediaStoryIds[0], 
-                       "(Gefunden in", mediaStoryIds.length, "Elementen)");
-            return mediaStoryIds[0];
+        const storyId = analyzeUrlForStoryIds(content);
+        if (storyId) {
+            console.log("[ISV-DEBUG] Story-ID aus og:url Meta-Tag extrahiert:", storyId);
+            return storyId;
         }
         
-        // In DOM nach data-* Attributen suchen
-        const elementsWithDataAttr = document.querySelectorAll('[data-id], [data-item-id], [data-media-id]');
-        for (const el of elementsWithDataAttr) {
-            const dataId = el.getAttribute('data-id') || el.getAttribute('data-item-id') || 
-                          el.getAttribute('data-media-id') || '';
-            
-            if (dataId && dataId.length === 19) {
-                console.log("[ISV-DEBUG] Gültige Story-ID aus data-Attribut gefunden:", dataId);
-                return dataId;
-            }
-        }
-        
-        console.log("[ISV-DEBUG] Keine geeignete Story-ID gefunden");
+        console.log("[ISV-DEBUG] Keine gültige Story-ID im og:url Meta-Tag gefunden");
         return null;
     }
 
@@ -801,7 +780,7 @@
         if (buttonShown || document.getElementById('isv-button')) {
             return;
         }
-
+        
         log('Füge Button hinzu');
 
         // Button erstellen
@@ -851,6 +830,10 @@
                 setTimeout(() => {
                     button.textContent = 'Zur Einzelansicht';
                 }, 2000);
+                
+                // Hier den Alert hinzufügen
+                alert('Fehler: Keine gültige Story-ID im og:url Meta-Tag gefunden!');
+                
                 log('Keine Story-ID oder Username gefunden für Umleitung');
             }
         });
