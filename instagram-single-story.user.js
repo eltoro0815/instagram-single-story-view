@@ -579,12 +579,66 @@
                     const value = el.getAttribute(attr);
                     if (value && /^\d{15,25}$/.test(value)) {
                         console.log(`[ISV-DEBUG] Mögliche Story-ID in ${attr} gefunden:`, value);
-                        foundIds.set(value, (foundIds.get(value) || 0) + 1);
+                        // Speichere ID und ihren Ursprung
+                        foundIds.set(value, {
+                            weight: (foundIds.get(value)?.weight || 0) + 1,
+                            source: `data-Attribut: ${attr}`
+                        });
                     }
                 });
             });
             
-            // 2. Suche in eingebetteten script-Tags mit JSON-Daten
+            // 2. Suche in ALLEN Attributen aller Elemente
+            const allElements = document.querySelectorAll('*');
+            allElements.forEach(el => {
+                if (!el.attributes) return;
+                
+                Array.from(el.attributes).forEach(attr => {
+                    const value = attr.value;
+                    // Suche nach 19-stelligen Zahlen in Attributwerten
+                    const matches = value.match(/\b\d{19}\b/g);
+                    if (matches) {
+                        matches.forEach(id => {
+                            console.log(`[ISV-DEBUG] Mögliche Story-ID im Attribut ${attr.name} gefunden:`, id);
+                            // Wenn nicht bereits erfasst durch data-* Attribute
+                            if (!foundIds.has(id) || !foundIds.get(id).source.includes('data-Attribut')) {
+                                foundIds.set(id, {
+                                    weight: (foundIds.get(id)?.weight || 0) + 1,
+                                    source: `Attribut: ${attr.name}`
+                                });
+                            }
+                        });
+                    }
+                    
+                    // Suche auch nach IDs in URL-Segmenten
+                    if (value.includes('stories/') || value.includes('/story/')) {
+                        const urlMatches = value.match(/stories\/[^\/]+\/(\d{19})/);
+                        if (urlMatches && urlMatches[1]) {
+                            console.log(`[ISV-DEBUG] Story-ID in URL-Segment gefunden:`, urlMatches[1]);
+                            foundIds.set(urlMatches[1], {
+                                weight: (foundIds.get(urlMatches[1])?.weight || 0) + 2, // Höhere Gewichtung
+                                source: `URL-Segment in ${attr.name}`
+                            });
+                        }
+                    }
+                });
+                
+                // Prüfe auch den Textinhalt auf 19-stellige Zahlen
+                if (el.textContent && !/^(script|style)$/i.test(el.tagName)) {
+                    const matches = el.textContent.match(/\b\d{19}\b/g);
+                    if (matches) {
+                        matches.forEach(id => {
+                            console.log(`[ISV-DEBUG] Mögliche Story-ID im Textinhalt gefunden:`, id);
+                            foundIds.set(id, {
+                                weight: (foundIds.get(id)?.weight || 0) + 1,
+                                source: `Textinhalt im <${el.tagName.toLowerCase()}> Element`
+                            });
+                        });
+                    }
+                }
+            });
+            
+            // 3. Suche in eingebetteten script-Tags mit JSON-Daten
             const scriptTags = document.querySelectorAll('script:not([src])');
             scriptTags.forEach(script => {
                 const content = script.textContent || '';
@@ -595,7 +649,10 @@
                     const matches = content.match(/\d{19}/g) || [];
                     matches.forEach(id => {
                         console.log("[ISV-DEBUG] Mögliche Story-ID in script-Tag gefunden:", id);
-                        foundIds.set(id, (foundIds.get(id) || 0) + 1);
+                        foundIds.set(id, {
+                            weight: (foundIds.get(id)?.weight || 0) + 1,
+                            source: `Script-Tag (direkter Text)`
+                        });
                     });
                     
                     // Versuche, JSON-Objekte zu parsen
@@ -611,7 +668,10 @@
                                 extractedIds.forEach(id => {
                                     if (id && id.length === 19) {
                                         console.log("[ISV-DEBUG] Story-ID aus JSON extrahiert:", id);
-                                        foundIds.set(id, (foundIds.get(id) || 0) + 3); // Höhere Gewichtung für JSON-Daten
+                                        foundIds.set(id, {
+                                            weight: (foundIds.get(id)?.weight || 0) + 3, // Höhere Gewichtung für JSON-Daten
+                                            source: `JSON-Daten in Script-Tag`
+                                        });
                                     }
                                 });
                             } catch (e) {
@@ -624,7 +684,7 @@
                 }
             });
             
-            // 3. Suche in window.__additionalDataLoaded
+            // 4. Suche in window.__additionalDataLoaded
             // Instagram speichert manchmal Daten in diesem Objekt
             if (typeof unsafeWindow !== 'undefined' && unsafeWindow.__additionalDataLoaded) {
                 console.log("[ISV-DEBUG] __additionalDataLoaded gefunden, durchsuche nach Story-IDs");
@@ -632,15 +692,59 @@
                 extractedIds.forEach(id => {
                     if (id && id.length === 19) {
                         console.log("[ISV-DEBUG] Story-ID aus __additionalDataLoaded extrahiert:", id);
-                        foundIds.set(id, (foundIds.get(id) || 0) + 5); // Höchste Gewichtung für diese Quelle
+                        foundIds.set(id, {
+                            weight: (foundIds.get(id)?.weight || 0) + 5, // Höchste Gewichtung für diese Quelle
+                            source: `window.__additionalDataLoaded`
+                        });
                     }
                 });
             }
             
+            // 5. NEUE METHODE: Durchsuche alle globalen Variablen im Window-Objekt
+            if (typeof unsafeWindow !== 'undefined') {
+                try {
+                    // Versuche, in allen Window-Properties nach IDs zu suchen
+                    for (const prop in unsafeWindow) {
+                        try {
+                            const value = unsafeWindow[prop];
+                            if (value && typeof value === 'object') {
+                                const extractedIds = extractIdsFromObject(value);
+                                extractedIds.forEach(id => {
+                                    if (id && id.length === 19) {
+                                        console.log(`[ISV-DEBUG] Story-ID in window.${prop} gefunden:`, id);
+                                        foundIds.set(id, {
+                                            weight: (foundIds.get(id)?.weight || 0) + 4, // Hohe Gewichtung
+                                            source: `window.${prop}`
+                                        });
+                                    }
+                                });
+                            }
+                        } catch (e) {
+                            // Ignoriere Fehler bei einzelnen Properties
+                        }
+                    }
+                } catch (e) {
+                    console.log("[ISV-DEBUG] Fehler beim Durchsuchen der Window-Properties:", e.message);
+                }
+            }
+            
+            // 6. NEUE METHODE: Direkte Suche in HTML-Inhalten
+            const htmlContent = document.documentElement.outerHTML;
+            const allIds = htmlContent.match(/\b\d{19}\b/g) || [];
+            allIds.forEach(id => {
+                if (!foundIds.has(id)) {
+                    console.log("[ISV-DEBUG] Story-ID direkt im HTML gefunden:", id);
+                    foundIds.set(id, {
+                        weight: 1,
+                        source: `HTML-Rohtext`
+                    });
+                }
+            });
+            
             // Konvertiere zu Array und sortiere nach Häufigkeit (häufigere IDs priorisieren)
             const sortedIds = Array.from(foundIds.entries())
-                .sort((a, b) => b[1] - a[1])
-                .map(entry => entry[0]);
+                .sort((a, b) => b[1].weight - a[1].weight)
+                .map(entry => ({ id: entry[0], info: entry[1] }));
                 
             if (sortedIds.length > 0) {
                 console.log("[ISV-DEBUG] Gefundene Story-IDs (sortiert nach Relevanz):", sortedIds);
@@ -704,8 +808,8 @@
         const domIds = searchDOMForStoryIds();
         if (domIds.length > 0) {
             // Nehme die am häufigsten vorkommende ID (erste in der sortierten Liste)
-            console.log("[ISV-DEBUG] Verwende Story-ID aus DOM-Analyse:", domIds[0]);
-            return domIds[0];
+            console.log("[ISV-DEBUG] Verwende Story-ID aus DOM-Analyse:", domIds[0].id);
+            return domIds[0].id;
         }
         
         console.log("[ISV-DEBUG] Keine gültige Story-ID gefunden");
@@ -1000,8 +1104,9 @@
             const domIds = searchDOMForStoryIds();
             if (domIds.length > 0) {
                 idList += 'DOM-Suche:\n';
-                domIds.forEach((id, index) => {
-                    idList += `- ${id}${index === 0 ? ' (Höchste Relevanz)' : ''}\n`;
+                domIds.forEach((idObj, index) => {
+                    const relevanceMarker = index === 0 ? ' (Höchste Relevanz)' : '';
+                    idList += `- ${idObj.id}: [Quelle: ${idObj.info.source}]${relevanceMarker}\n`;
                 });
                 idList += '\n';
             } else {
