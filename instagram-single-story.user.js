@@ -6,6 +6,8 @@
 // @author       eltoro0815
 // @match        https://www.instagram.com/stories/*
 // @match        *://*.instagram.com/stories/*
+// @match        https://www.instagram.com/*
+// @match        *://*.instagram.com/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js
 // @downloadURL  https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js
@@ -29,6 +31,7 @@
     let mainTimer = null;
     let lastStatusMessages = {};     // Für das Tracking wiederholter Nachrichten
     let researchDone = false;        // Vermeidet wiederholte Research-Ausführungen
+    let researchButtonAdded = false; // Verfolgt, ob der Research-Button bereits hinzugefügt wurde
 
     // Logger-Funktion
     const log = (...args) => {
@@ -179,10 +182,10 @@
 
     // Button zum manuellen Starten des Research-Modus
     function addResearchButton() {
-        if (document.getElementById('isv-research-button')) {
+        if (document.getElementById('isv-research-button') || researchButtonAdded) {
             return;
         }
-
+        
         const button = document.createElement('button');
         button.id = 'isv-research-button';
         button.textContent = 'Instagram DOM Research';
@@ -190,8 +193,8 @@
             position: fixed;
             top: 10px;
             left: 10px;
-            z-index: 999999;
-            background: rgba(128, 0, 128, 0.7);
+            z-index: 9999999;
+            background: rgba(128, 0, 128, 0.9);
             color: white;
             border: none;
             border-radius: 4px;
@@ -200,15 +203,45 @@
             cursor: pointer;
             font-family: Arial, sans-serif;
             transition: opacity 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         `;
-
-        button.addEventListener('click', function () {
+        
+        button.addEventListener('click', function() {
             researchDone = false;  // Reset, damit es erneut ausgeführt werden kann
             researchInstagramDOM();
         });
-
+        
+        // Füge den Button direkt zum body hinzu - Instagram hat manchmal verschachtelte Container
         document.body.appendChild(button);
+        researchButtonAdded = true;
+        
+        // Stelle sicher, dass der Button sichtbar ist
+        setTimeout(() => {
+            if (document.getElementById('isv-research-button')) {
+                document.getElementById('isv-research-button').style.display = 'block';
+                logStatus('Research-Button hinzugefügt und sichtbar gemacht');
+            }
+        }, 500);
     }
+
+    // Funktion, die den Research-Button zur Seite hinzufügt
+    function ensureResearchButtonExists() {
+        if (RESEARCH_MODE && !researchButtonAdded && document.body) {
+            addResearchButton();
+            logStatus('Research-Button zur Seite hinzugefügt');
+        }
+    }
+
+    // Füge den Button so früh wie möglich hinzu
+    document.addEventListener('DOMContentLoaded', ensureResearchButtonExists);
+    
+    // Falls DOMContentLoaded bereits abgefeuert wurde, direkt hinzufügen
+    if (document.readyState !== 'loading') {
+        ensureResearchButtonExists();
+    }
+    
+    // Periodische Prüfung, ob der Button noch existiert
+    setInterval(ensureResearchButtonExists, 2000);
 
     // Hilfsfunktion zum Sammeln von Klassennamen
     function collectClasses(elements) {
@@ -481,83 +514,128 @@
 
     function isKarusellView() {
         logStatus('Analysiere DOM für Karussell-Erkennung...');
-
+        
         // Instagram verwendet ein SPA-Framework, daher können wir nicht auf URLs vertrauen
         // Wir müssen die DOM-Struktur analysieren
-
+        
         try {
             // 1. Direkte Karussell-Indikatoren suchen
-            // Prüfen auf typische Story-Navigation-Elemente
-            const nextStoryBtn = document.querySelector('button[aria-label="Weiter"], button[aria-label="Next"], [aria-label*="next"], [aria-label*="Next"], [class*="next"], [class*="Next"]');
-            const prevStoryBtn = document.querySelector('button[aria-label="Zurück"], button[aria-label="Previous"], [aria-label*="previous"], [aria-label*="Previous"], [class*="previous"], [class*="Previous"]');
-
+            // 1.1 Prüfen auf typische Story-Navigation-Elemente anhand von aria-labels
+            const nextStoryBtn = document.querySelector('button[aria-label="Weiter"], button[aria-label="Next"], [aria-label*="next"], [aria-label*="Next"], [aria-label="Weiter"], [aria-label="Next"]');
+            const prevStoryBtn = document.querySelector('button[aria-label="Zurück"], button[aria-label="Previous"], [aria-label*="previous"], [aria-label*="Previous"], [aria-label="Zurück"], [aria-label="Previous"], [aria-label="Vorherige"], [aria-label="Vorherige"]');
+            
+            // 1.2 Suche auch nach SVG-Elementen mit diesen Labels (Research zeigt, dass diese oft vorhanden sind)
+            const nextSvgIcon = document.querySelector('svg[aria-label="Weiter"], svg[aria-label="Next"]');
+            const prevSvgIcon = document.querySelector('svg[aria-label="Zurück"], svg[aria-label="Previous"], svg[aria-label="Vorherige"]');
+            
             if (nextStoryBtn) logStatus('Gefunden: Next-Button', nextStoryBtn.outerHTML.substring(0, 100));
             if (prevStoryBtn) logStatus('Gefunden: Previous-Button', prevStoryBtn.outerHTML.substring(0, 100));
-
-            if (nextStoryBtn || prevStoryBtn) {
-                logStatus('Karussell-Erkennung: true (Navigation-Buttons gefunden)');
+            if (nextSvgIcon) logStatus('Gefunden: Next-SVG-Icon', nextSvgIcon.outerHTML.substring(0, 100));
+            if (prevSvgIcon) logStatus('Gefunden: Previous-SVG-Icon', prevSvgIcon.outerHTML.substring(0, 100));
+            
+            if (nextStoryBtn || prevStoryBtn || nextSvgIcon || prevSvgIcon) {
+                logStatus('Karussell-Erkennung: true (Navigation-Elemente gefunden)');
                 return true;
             }
-
-            // 2. Story-Fortschrittsanzeige analysieren
+            
+            // 2. Instagram-spezifische Klassen für Stories prüfen
+            const storyClasses = ['IG_DWSTORY', 'IG_DWSTORY_ALL', 'IG_IMAGE_VIEWER'];
+            const storyClassElements = document.querySelectorAll(storyClasses.map(cls => `.${cls}`).join(', '));
+            
+            // Wenn wir mehrere Story-Elemente finden, ist es wahrscheinlich ein Karussell
+            if (storyClassElements.length > 2) {
+                logStatus(`Gefunden: ${storyClassElements.length} Instagram-Story-Elemente`);
+                logStatus('Karussell-Erkennung: true (Mehrere Story-Elemente gefunden)');
+                return true;
+            }
+            
+            // 3. Story-Fortschrittsanzeige analysieren
             const progressBars = document.querySelectorAll('[role="progressbar"], [class*="progress"], [class*="Progress"]');
             logStatus(`Gefunden: ${progressBars.length} Fortschrittsbalken-Elemente`);
-
-            if (progressBars.length > 1) {
-                logStatus('Karussell-Erkennung: true (Mehrere Fortschrittsbalken gefunden)');
+            
+            if (progressBars.length > 0) {
+                logStatus('Karussell-Erkennung: true (Fortschrittsbalken gefunden)');
                 return true;
             }
-
-            // 3. Story-Container und Layout-Elemente prüfen
+            
+            // 4. Story-Container und Layout-Elemente prüfen
             const storyTrays = document.querySelectorAll('[data-visualcompletion="tray"], [class*="tray"], [class*="Tray"], [class*="stories-viewer"], [class*="StoriesViewer"]');
-
+            
             if (storyTrays.length > 0) {
                 logStatus(`Gefunden: ${storyTrays.length} Story-Trays/Container`);
                 logStatus('Karussell-Erkennung: true (Story-Trays gefunden)');
                 return true;
             }
-
-            // 4. Prüfen auf mehrere Benutzerbilder oder Profilinformationen (typisch für Karussell)
+            
+            // 5. Prüfen auf mehrere Benutzerbilder oder Profilinformationen (typisch für Karussell)
             const profileIcons = document.querySelectorAll('img[alt*="profile"], img[data-visualcompletion="media-vc-image"]');
             if (profileIcons.length > 1) {
                 logStatus(`Gefunden: ${profileIcons.length} Profilbilder`);
                 logStatus('Karussell-Erkennung: true (Mehrere Profilbilder gefunden)');
                 return true;
             }
-
-            // 5. Prüfen auf typische Karussell-Navigation via Event-Handler
+            
+            // 6. Prüfen auf positionierte Navigations-Elemente an den Bildschirmrändern
+            // Research zeigt, dass Karussells oft Links am linken und rechten Bildschirmrand haben
+            const navElements = [...document.querySelectorAll('[role="link"], a, [role="button"], [tabindex="0"]')]
+                .filter(el => {
+                    const rect = el.getBoundingClientRect();
+                    if (rect.width === 0 || rect.height === 0) return false;
+                    
+                    const viewportWidth = window.innerWidth;
+                    const viewportHeight = window.innerHeight;
+                    
+                    // Prüfen, ob das Element an der Seite des Bildschirms ist (typisch für Nav)
+                    const isLeftSide = rect.left < viewportWidth * 0.2;
+                    const isRightSide = rect.right > viewportWidth * 0.8;
+                    const isTallEnough = rect.height > viewportHeight * 0.2;
+                    
+                    return (isLeftSide || isRightSide) && isTallEnough;
+                });
+            
+            logStatus(`Gefunden: ${navElements.length} positionierte Navigations-Elemente`);
+            
+            // Wenn wir mindestens 2 Elemente haben (links und rechts), ist es wahrscheinlich ein Karussell
+            if (navElements.length >= 2) {
+                logStatus('Karussell-Erkennung: true (Navigations-Elemente an Bildschirmrändern gefunden)');
+                return true;
+            }
+            
+            // 7. Prüfen auf typische Karussell-Navigation via Event-Handler
             const clickHandlers = document.querySelectorAll('[role="button"], [tabindex="0"]');
             let potentialNavElements = 0;
-
+            
             for (const el of clickHandlers) {
                 // Position und Größe des Elements prüfen
                 const rect = el.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) continue;
+                
                 const viewportWidth = window.innerWidth;
                 const viewportHeight = window.innerHeight;
-
+                
                 // Prüfen, ob das Element an der Seite des Bildschirms ist (typisch für Nav)
                 const isLeftSide = rect.left < viewportWidth * 0.2 && rect.width < viewportWidth * 0.3;
                 const isRightSide = rect.right > viewportWidth * 0.8 && rect.width < viewportWidth * 0.3;
                 const isFullHeight = rect.height > viewportHeight * 0.5;
-
+                
                 if ((isLeftSide || isRightSide) && isFullHeight) {
                     potentialNavElements++;
                     logStatus(`Gefunden: Potenzielles Navigations-Element an ${isLeftSide ? 'linker' : 'rechter'} Seite`);
                 }
             }
-
+            
             if (potentialNavElements >= 2) {
                 logStatus('Karussell-Erkennung: true (Story-Navigation an den Seiten gefunden)');
                 return true;
             }
-
-            // 6. DOM-Struktur auf typische Karussell-Klassen prüfen
+            
+            // 8. DOM-Struktur auf typische Karussell-Klassen prüfen
             const allElements = document.querySelectorAll('*');
             let carouselClassFound = false;
-
+            
             for (const el of allElements) {
                 if (!el.className) continue;
-
+                
                 const classString = typeof el.className === 'string' ? el.className : '';
                 if (classString.match(/carousel|swipe|slider|story-?viewer|story-?tray/i)) {
                     logStatus(`Gefunden: Element mit Karussell-Klasse: ${classString}`);
@@ -565,16 +643,16 @@
                     break;
                 }
             }
-
+            
             if (carouselClassFound) {
                 logStatus('Karussell-Erkennung: true (Karussell-Klassenname gefunden)');
                 return true;
             }
-
+            
             // Keine Karussell-Indikatoren gefunden
             logStatus('Karussell-Erkennung: false (keine Karussell-Elemente gefunden)');
             return false;
-
+            
         } catch (error) {
             logStatus('Fehler bei Karussell-Erkennung:', error.message);
             return false;
@@ -660,22 +738,20 @@
             removeSingleViewButton();
             return;
         }
-
+        
         log('Story-Seite erkannt');
-
-        // Research-Button immer hinzufügen, wenn wir auf einer Story-Seite sind
-        if (RESEARCH_MODE) {
-            addResearchButton();
-        }
-
-        // Research durchführen, wenn noch nicht geschehen
+        
+        // Für Story-Seiten haben wir den Research-Modus bereits separat implementiert
+        // Der Research-Button wird nun global für alle Instagram-Seiten hinzugefügt
+        
+        // Research durchführen, wenn noch nicht geschehen und wir auf einer Story-Seite sind
         if (RESEARCH_MODE && !researchDone && document.readyState === 'complete') {
             researchInstagramDOM();
         }
-
+        
         // Prüfe, ob es sich um ein Karussell handelt
         const carousel = isKarusellView();
-
+        
         if (carousel) {
             log('Karussell-Ansicht erkannt');
             if (!buttonShown) {
@@ -707,10 +783,10 @@
 
     function onReady() {
         logStatus('DOM bereit, starte Überwachung');
-
+        
         // Initiale Prüfung
         setTimeout(checkForStoryAndAddButton, 500);
-
+        
         // Regelmäßige Prüfung
         mainTimer = setInterval(() => {
             // URL-Änderung erkennen
@@ -721,23 +797,23 @@
                 // Bei URL-Änderung Cache für wiederholte Meldungen zurücksetzen
                 lastStatusMessages = {};
             }
-
+            
             checkForStoryAndAddButton();
         }, CHECK_INTERVAL);
-
+        
         // URL-Änderungen überwachen (History API)
         const originalPushState = history.pushState;
-        history.pushState = function () {
+        history.pushState = function() {
             originalPushState.apply(this, arguments);
-
+            
             logStatus('pushState erkannt');
             currentUrl = location.href;
-            buttonShown = false;
+                buttonShown = false;
             // Bei URL-Änderung Cache für wiederholte Meldungen zurücksetzen
             lastStatusMessages = {};
             setTimeout(checkForStoryAndAddButton, 500);
         };
-
+        
         // Zurück-Button überwachen
         window.addEventListener('popstate', () => {
             logStatus('popstate erkannt');
