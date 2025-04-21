@@ -860,12 +860,132 @@
         buttonShown = true;
     }
 
+    // Button hinzufügen, der alle gefundenen Story-IDs als Alert anzeigt
+    function addStoryIdListButton() {
+        // Nicht doppelt hinzufügen
+        if (document.getElementById('isv-id-list-button')) {
+            return;
+        }
+
+        log('Füge Story-ID-Liste-Button hinzu');
+
+        // Button erstellen
+        const button = document.createElement('button');
+        button.id = 'isv-id-list-button';
+        button.textContent = 'Story-IDs anzeigen';
+        button.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 150px;
+            z-index: 999999;
+            background: rgba(0, 128, 128, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: Arial, sans-serif;
+            transition: opacity 0.3s;
+        `;
+
+        // Klick-Handler
+        button.addEventListener('click', function () {
+            log('Story-ID-Liste-Button geklickt');
+            
+            // Sammle alle möglichen Story-IDs
+            let idList = '';
+            
+            // 1. Analysiere die aktuelle URL für Story-IDs
+            const urlStoryId = analyzeUrlForStoryIds(window.location.href);
+            if (urlStoryId) {
+                idList += `URL: ${urlStoryId} (Wird für die Einzelansicht verwendet)\n\n`;
+            } else {
+                idList += 'Keine ID in der URL gefunden\n\n';
+            }
+            
+            // 2. Suche in Meta-Tags
+            const metaTags = document.querySelectorAll('meta[property^="og:"], meta[name^="og:"]');
+            let metaIdsFound = false;
+            
+            for (const meta of metaTags) {
+                const content = meta.getAttribute('content') || '';
+                if (!content) continue;
+                
+                const metaStoryId = analyzeUrlForStoryIds(content);
+                if (metaStoryId) {
+                    if (!metaIdsFound) {
+                        idList += 'Meta-Tags:\n';
+                        metaIdsFound = true;
+                    }
+                    const tag = meta.getAttribute('property') || meta.getAttribute('name');
+                    idList += `- ${tag}: ${metaStoryId}\n`;
+                }
+            }
+            
+            if (!metaIdsFound) {
+                idList += 'Keine IDs in Meta-Tags gefunden\n\n';
+            } else {
+                idList += '\n';
+            }
+            
+            // 3. Analysiere Medien-Quellen
+            const mediaStoryIds = analyzeMediaSourcesForStoryIds();
+            if (mediaStoryIds.length > 0) {
+                idList += 'Medien-Quellen:\n';
+                mediaStoryIds.forEach((id, index) => {
+                    idList += `- ${id}${index === 0 ? ' (Primäre ID)' : ''}\n`;
+                });
+                idList += '\n';
+            } else {
+                idList += 'Keine IDs in Medien-Quellen gefunden\n\n';
+            }
+            
+            // 4. In DOM nach data-* Attributen suchen
+            const elementsWithDataAttr = document.querySelectorAll('[data-id], [data-item-id], [data-media-id]');
+            let dataIdsFound = false;
+            
+            for (const el of elementsWithDataAttr) {
+                const dataId = el.getAttribute('data-id') || el.getAttribute('data-item-id') || 
+                            el.getAttribute('data-media-id') || '';
+                
+                if (dataId && dataId.length === 19) {
+                    if (!dataIdsFound) {
+                        idList += 'Data-Attribute:\n';
+                        dataIdsFound = true;
+                    }
+                    idList += `- ${dataId}\n`;
+                }
+            }
+            
+            if (!dataIdsFound) {
+                idList += 'Keine IDs in data-Attributen gefunden\n';
+            }
+            
+            // Zeige das Ergebnis in einem Alert an
+            if (idList.trim() === '') {
+                alert('Keine Story-IDs gefunden!');
+            } else {
+                alert(`Gefundene Story-IDs:\n\n${idList}`);
+            }
+        });
+
+        // Button zum DOM hinzufügen
+        document.body.appendChild(button);
+    }
+
     function removeSingleViewButton() {
         const button = document.getElementById('isv-button');
         if (button) {
             button.remove();
             buttonShown = false;
             log('Button entfernt');
+        }
+        
+        const idListButton = document.getElementById('isv-id-list-button');
+        if (idListButton) {
+            idListButton.remove();
+            log('ID-Liste-Button entfernt');
         }
     }
 
@@ -894,6 +1014,8 @@
             if (!buttonShown) {
                 logStatus('Karussell-Modus: Füge Button hinzu');
                 addSingleViewButton();
+                // Füge auch den Story-ID-Liste-Button hinzu
+                addStoryIdListButton();
             }
         } else {
             log('Einzelansicht erkannt');
