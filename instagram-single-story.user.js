@@ -19,23 +19,315 @@
     const DEBUG = true;               // Ausführliche Logs in der Konsole
     const CHECK_INTERVAL = 250;       // Prüfintervall in ms
     const COOLDOWN = 2000;            // Cooldown zwischen Aktionen in ms
+    const RESEARCH_MODE = true;       // Aktiviert den Research-Modus
     
     // Status-Tracking
     let buttonShown = false;
     let lastActionTime = 0;
     let currentUrl = location.href;
     let mainTimer = null;
+    let lastStatusMessages = {};     // Für das Tracking wiederholter Nachrichten
+    let researchDone = false;        // Vermeidet wiederholte Research-Ausführungen
     
     // Logger-Funktion
     const log = (...args) => {
+        if (DEBUG) {
+            // Nur für einfache Meldungen ohne Objekte
+            if (args.length === 1) {
+                const message = args[0];
+                if (lastStatusMessages[message] === true) {
+                    // Wiederholte Meldung nicht erneut ausgeben
+                    return;
+                }
+                lastStatusMessages[message] = true;
+            } else if (args.length === 2 && typeof args[1] === 'string') {
+                // Für Meldungen mit einem zusätzlichen String-Parameter
+                const key = args[0] + ' ' + args[1];
+                if (lastStatusMessages[key] === true) {
+                    // Wiederholte Meldung nicht erneut ausgeben
+                    return;
+                }
+                lastStatusMessages[key] = true;
+            }
+            
+            console.log('[ISV]', ...args);
+        }
+    };
+
+    // Wichtige Statusänderungen immer loggen
+    const logStatus = (...args) => {
         if (DEBUG) {
             console.log('[ISV]', ...args);
         }
     };
     
+    // Research-Logger - immer ausgeben, um DOM-Strukturen zu analysieren
+    const logResearch = (...args) => {
+        console.log('[ISV-RESEARCH]', ...args);
+        
+        // Speichere alle Research-Ausgaben für die Zwischenablage
+        if (!window.isvResearchData) {
+            window.isvResearchData = [];
+        }
+        
+        // Formatierte Ausgabe hinzufügen
+        window.isvResearchData.push('[ISV-RESEARCH] ' + args.map(arg => {
+            if (typeof arg === 'object') {
+                try {
+                    return JSON.stringify(arg, null, 2);
+                } catch (e) {
+                    return String(arg);
+                }
+            }
+            return String(arg);
+        }).join(' '));
+    };
+    
+    // Hilfsfunktion zum Kopieren in die Zwischenablage
+    function copyResearchToClipboard() {
+        if (!window.isvResearchData || window.isvResearchData.length === 0) {
+            return;
+        }
+        
+        // Daten in die Zwischenablage kopieren
+        const textToCopy = window.isvResearchData.join('\n');
+        
+        try {
+            // Moderne Clipboard API
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                console.log('[ISV] Research-Daten in die Zwischenablage kopiert!');
+                
+                // Benachrichtigung anzeigen
+                const notification = document.createElement('div');
+                notification.textContent = 'Instagram Research-Daten kopiert!';
+                notification.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    left: 20px;
+                    background: rgba(0, 0, 0, 0.8);
+                    color: white;
+                    padding: 10px 15px;
+                    border-radius: 4px;
+                    z-index: 999999;
+                    font-family: Arial, sans-serif;
+                `;
+                document.body.appendChild(notification);
+                
+                // Nach 3 Sekunden ausblenden
+                setTimeout(() => {
+                    notification.style.opacity = '0';
+                    notification.style.transition = 'opacity 0.5s';
+                    setTimeout(() => notification.remove(), 500);
+                }, 3000);
+                
+            }).catch(err => {
+                console.error('[ISV] Fehler beim Kopieren in die Zwischenablage:', err);
+                // Fallback-Methode bei Fehler
+                fallbackCopy(textToCopy);
+            });
+        } catch (e) {
+            // Fallback für ältere Browser
+            fallbackCopy(textToCopy);
+        }
+    }
+    
+    // Fallback-Methode
+    function fallbackCopy(text) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        
+        try {
+            document.execCommand('copy');
+            console.log('[ISV] Research-Daten in die Zwischenablage kopiert (Fallback-Methode)');
+            
+            // Benachrichtigung anzeigen
+            const notification = document.createElement('div');
+            notification.textContent = 'Instagram Research-Daten kopiert!';
+            notification.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 10px 15px;
+                border-radius: 4px;
+                z-index: 999999;
+                font-family: Arial, sans-serif;
+            `;
+            document.body.appendChild(notification);
+            
+            // Nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.5s';
+                setTimeout(() => notification.remove(), 500);
+            }, 3000);
+            
+        } catch (e) {
+            console.error('[ISV] Fehler beim Kopieren (Fallback):', e);
+        }
+        
+        document.body.removeChild(textarea);
+    }
+    
+    // Hilfsfunktion zum Sammeln von Klassennamen
+    function collectClasses(elements) {
+        const classMap = {};
+        elements.forEach(el => {
+            if (el.className && typeof el.className === 'string') {
+                el.className.split(' ').forEach(cls => {
+                    if (cls && cls.trim()) {
+                        classMap[cls.trim()] = (classMap[cls.trim()] || 0) + 1;
+                    }
+                });
+            }
+        });
+        return classMap;
+    }
+    
+    // Führt Research für Instagram-DOM durch
+    function researchInstagramDOM() {
+        if (researchDone || !RESEARCH_MODE) return;
+        
+        try {
+            // Zurücksetzen der Research-Daten
+            window.isvResearchData = [];
+            
+            logResearch('---- INSTAGRAM DOM RESEARCH GESTARTET ----');
+            logResearch('URL:', window.location.href);
+            logResearch('Seitentitel:', document.title);
+            
+            // Sammle alle Buttons
+            const buttons = document.querySelectorAll('button');
+            logResearch(`${buttons.length} Buttons gefunden`);
+            
+            // Analysiere ARIA Labels
+            const buttonLabels = {};
+            buttons.forEach(btn => {
+                const label = btn.getAttribute('aria-label');
+                if (label) {
+                    buttonLabels[label] = (buttonLabels[label] || 0) + 1;
+                }
+            });
+            logResearch('Button ARIA Labels:', buttonLabels);
+            
+            // Sammle alle Rollen
+            const roles = {};
+            document.querySelectorAll('[role]').forEach(el => {
+                const role = el.getAttribute('role');
+                roles[role] = (roles[role] || 0) + 1;
+            });
+            logResearch('Rollen im DOM:', roles);
+            
+            // Sammle häufige Klassennamen
+            const allElements = document.querySelectorAll('*');
+            const classMap = collectClasses(allElements);
+            
+            // Sortiere nach Häufigkeit
+            const sortedClasses = Object.entries(classMap)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 20);
+            
+            logResearch('Top 20 Klassennamen:', sortedClasses);
+            
+            // Suche nach Story-spezifischen Elementen
+            const classPatterns = [
+                /story/i, /carousel/i, /slider/i, /navigation/i, /progress/i, 
+                /next/i, /prev/i, /swipe/i, /viewer/i, /tray/i
+            ];
+            
+            const storyRelatedClasses = {};
+            Object.keys(classMap).forEach(cls => {
+                for (const pattern of classPatterns) {
+                    if (pattern.test(cls)) {
+                        storyRelatedClasses[cls] = classMap[cls];
+                        break;
+                    }
+                }
+            });
+            
+            logResearch('Story-bezogene Klassen:', storyRelatedClasses);
+            
+            // Finde Navigations-Container
+            const potentialNavContainers = [];
+            document.querySelectorAll('div').forEach(div => {
+                // Prüfe Position und Größe
+                const rect = div.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    // Links- oder rechts-positioniert
+                    const isLeftOrRight = (rect.left < 100 || rect.right > window.innerWidth - 100);
+                    // Ausreichend hoch
+                    const isTallEnough = rect.height > window.innerHeight * 0.3;
+                    
+                    if (isLeftOrRight && isTallEnough) {
+                        potentialNavContainers.push({
+                            element: div,
+                            position: rect.left < 100 ? 'links' : 'rechts',
+                            classes: div.className,
+                            children: div.children.length
+                        });
+                    }
+                }
+            });
+            
+            logResearch('Potenzielle Navigations-Container:', potentialNavContainers);
+            
+            // Suche nach Fortschrittsanzeigen
+            const progressElements = document.querySelectorAll('[role="progressbar"], [class*="progress"], [class*="Progress"]');
+            
+            if (progressElements.length > 0) {
+                const progressData = Array.from(progressElements).map(el => ({
+                    classes: el.className,
+                    rect: el.getBoundingClientRect(),
+                    parent: el.parentElement ? {
+                        classes: el.parentElement.className,
+                        childCount: el.parentElement.children.length
+                    } : null
+                }));
+                
+                logResearch(`${progressElements.length} Fortschrittsanzeigen gefunden:`, progressData);
+            }
+            
+            // Instagram nutzt oft SVG für UI-Elemente
+            const svgElements = document.querySelectorAll('svg');
+            const svgData = Array.from(svgElements).map(svg => {
+                const rect = svg.getBoundingClientRect();
+                // Nur relevante SVGs (ignoriere kleine Icons)
+                if (rect.width > 20 || rect.height > 20) {
+                    return {
+                        rect: {
+                            left: rect.left,
+                            top: rect.top,
+                            width: rect.width,
+                            height: rect.height
+                        },
+                        ariaLabel: svg.getAttribute('aria-label'),
+                        parentClasses: svg.parentElement ? svg.parentElement.className : null
+                    };
+                }
+                return null;
+            }).filter(Boolean);
+            
+            logResearch(`${svgData.length} relevante SVG-Elemente gefunden:`, svgData);
+            
+            logResearch('---- INSTAGRAM DOM RESEARCH ABGESCHLOSSEN ----');
+            
+            // In die Zwischenablage kopieren
+            setTimeout(copyResearchToClipboard, 500);
+            
+            researchDone = true;
+        } catch (error) {
+            logResearch('Fehler beim DOM Research:', error.message);
+        }
+    }
+    
     // Initialer Log
-    log('Instagram Single Story View gestartet', new Date().toISOString());
-    log('URL:', window.location.href);
+    logStatus('Instagram Single Story View gestartet', new Date().toISOString());
+    logStatus('URL:', window.location.href);
     
     // Hilfsfunktionen
     function isStoryPage() {
@@ -93,29 +385,105 @@
     }
     
     function isKarusellView() {
-        // Bei URL ohne Story-ID ist es immer ein Karussell
-        if (!isFullStoryUrl()) {
-            log('URL ohne Story-ID - definitiv ein Karussell');
-            return true;
+        logStatus('Analysiere DOM für Karussell-Erkennung...');
+        
+        // Instagram verwendet ein SPA-Framework, daher können wir nicht auf URLs vertrauen
+        // Wir müssen die DOM-Struktur analysieren
+        
+        try {
+            // 1. Direkte Karussell-Indikatoren suchen
+            // Prüfen auf typische Story-Navigation-Elemente
+            const nextStoryBtn = document.querySelector('button[aria-label="Weiter"], button[aria-label="Next"], [aria-label*="next"], [aria-label*="Next"], [class*="next"], [class*="Next"]');
+            const prevStoryBtn = document.querySelector('button[aria-label="Zurück"], button[aria-label="Previous"], [aria-label*="previous"], [aria-label*="Previous"], [class*="previous"], [class*="Previous"]');
+            
+            if (nextStoryBtn) logStatus('Gefunden: Next-Button', nextStoryBtn.outerHTML.substring(0, 100));
+            if (prevStoryBtn) logStatus('Gefunden: Previous-Button', prevStoryBtn.outerHTML.substring(0, 100));
+            
+            if (nextStoryBtn || prevStoryBtn) {
+                logStatus('Karussell-Erkennung: true (Navigation-Buttons gefunden)');
+                return true;
+            }
+            
+            // 2. Story-Fortschrittsanzeige analysieren
+            const progressBars = document.querySelectorAll('[role="progressbar"], [class*="progress"], [class*="Progress"]');
+            logStatus(`Gefunden: ${progressBars.length} Fortschrittsbalken-Elemente`);
+            
+            if (progressBars.length > 1) {
+                logStatus('Karussell-Erkennung: true (Mehrere Fortschrittsbalken gefunden)');
+                return true;
+            }
+            
+            // 3. Story-Container und Layout-Elemente prüfen
+            const storyTrays = document.querySelectorAll('[data-visualcompletion="tray"], [class*="tray"], [class*="Tray"], [class*="stories-viewer"], [class*="StoriesViewer"]');
+            
+            if (storyTrays.length > 0) {
+                logStatus(`Gefunden: ${storyTrays.length} Story-Trays/Container`);
+                logStatus('Karussell-Erkennung: true (Story-Trays gefunden)');
+                return true;
+            }
+            
+            // 4. Prüfen auf mehrere Benutzerbilder oder Profilinformationen (typisch für Karussell)
+            const profileIcons = document.querySelectorAll('img[alt*="profile"], img[data-visualcompletion="media-vc-image"]');
+            if (profileIcons.length > 1) {
+                logStatus(`Gefunden: ${profileIcons.length} Profilbilder`);
+                logStatus('Karussell-Erkennung: true (Mehrere Profilbilder gefunden)');
+                return true;
+            }
+            
+            // 5. Prüfen auf typische Karussell-Navigation via Event-Handler
+            const clickHandlers = document.querySelectorAll('[role="button"], [tabindex="0"]');
+            let potentialNavElements = 0;
+            
+            for (const el of clickHandlers) {
+                // Position und Größe des Elements prüfen
+                const rect = el.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                
+                // Prüfen, ob das Element an der Seite des Bildschirms ist (typisch für Nav)
+                const isLeftSide = rect.left < viewportWidth * 0.2 && rect.width < viewportWidth * 0.3;
+                const isRightSide = rect.right > viewportWidth * 0.8 && rect.width < viewportWidth * 0.3;
+                const isFullHeight = rect.height > viewportHeight * 0.5;
+                
+                if ((isLeftSide || isRightSide) && isFullHeight) {
+                    potentialNavElements++;
+                    logStatus(`Gefunden: Potenzielles Navigations-Element an ${isLeftSide ? 'linker' : 'rechter'} Seite`);
+                }
+            }
+            
+            if (potentialNavElements >= 2) {
+                logStatus('Karussell-Erkennung: true (Story-Navigation an den Seiten gefunden)');
+                return true;
+            }
+            
+            // 6. DOM-Struktur auf typische Karussell-Klassen prüfen
+            const allElements = document.querySelectorAll('*');
+            let carouselClassFound = false;
+            
+            for (const el of allElements) {
+                if (!el.className) continue;
+                
+                const classString = typeof el.className === 'string' ? el.className : '';
+                if (classString.match(/carousel|swipe|slider|story-?viewer|story-?tray/i)) {
+                    logStatus(`Gefunden: Element mit Karussell-Klasse: ${classString}`);
+                    carouselClassFound = true;
+                    break;
+                }
+            }
+            
+            if (carouselClassFound) {
+                logStatus('Karussell-Erkennung: true (Karussell-Klassenname gefunden)');
+                return true;
+            }
+            
+            // Keine Karussell-Indikatoren gefunden
+            logStatus('Karussell-Erkennung: false (keine Karussell-Elemente gefunden)');
+            return false;
+            
+        } catch (error) {
+            logStatus('Fehler bei Karussell-Erkennung:', error.message);
+            return false;
         }
-        
-        // Prüfen auf typische Karussell-Elemente
-        const nextStoryBtn = document.querySelector('button[aria-label="Weiter"], button[aria-label="Next"], [aria-label*="next"], [aria-label*="Next"]');
-        const prevStoryBtn = document.querySelector('button[aria-label="Zurück"], button[aria-label="Previous"], [aria-label*="previous"], [aria-label*="Previous"]');
-        
-        // Prüfe auf mehrere Fortschrittsbalken
-        const progressBars = document.querySelectorAll('[role="progressbar"], [class*="progress"], [class*="Progress"]');
-        
-        const isCarousel = (nextStoryBtn !== null || prevStoryBtn !== null || progressBars.length > 1);
-        
-        const elementsFound = [];
-        if (nextStoryBtn !== null) elementsFound.push("Nächste-Button");
-        if (prevStoryBtn !== null) elementsFound.push("Vorherige-Button");
-        if (progressBars.length > 1) elementsFound.push(`${progressBars.length} Fortschrittsbalken`);
-        
-        log(`Karussell-Erkennung: ${isCarousel}`, elementsFound.length > 0 ? `(${elementsFound.join(', ')})` : '(keine Elemente gefunden)');
-        
-        return isCarousel;
     }
     
     function addSingleViewButton() {
@@ -200,32 +568,45 @@
         
         log('Story-Seite erkannt');
         
+        // Research durchführen, wenn noch nicht geschehen
+        if (RESEARCH_MODE && !researchDone && document.readyState === 'complete') {
+            researchInstagramDOM();
+        }
+        
         // Prüfe, ob es sich um ein Karussell handelt
-        if (isKarusellView()) {
+        const carousel = isKarusellView();
+        
+        if (carousel) {
             log('Karussell-Ansicht erkannt');
-            addSingleViewButton();
+            if (!buttonShown) {
+                logStatus('Karussell-Modus: Füge Button hinzu');
+                addSingleViewButton();
+            }
         } else {
             log('Einzelansicht erkannt');
-            removeSingleViewButton();
+            if (buttonShown) {
+                logStatus('Einzelansicht: Entferne Button');
+                removeSingleViewButton();
+            }
         }
     }
     
     // Hauptfunktion
     function init() {
-        log('Initialisiere');
+        logStatus('Initialisiere');
         
         // Wenn DOM noch nicht geladen, warten
         if (document.readyState === 'loading') {
-            log('Dokument wird noch geladen, warte auf DOMContentLoaded');
+            logStatus('Dokument wird noch geladen, warte auf DOMContentLoaded');
             document.addEventListener('DOMContentLoaded', onReady);
         } else {
-            log('Dokument bereits geladen');
+            logStatus('Dokument bereits geladen');
             onReady();
         }
     }
     
     function onReady() {
-        log('DOM bereit, starte Überwachung');
+        logStatus('DOM bereit, starte Überwachung');
         
         // Initiale Prüfung
         setTimeout(checkForStoryAndAddButton, 500);
@@ -234,9 +615,11 @@
         mainTimer = setInterval(() => {
             // URL-Änderung erkennen
             if (currentUrl !== location.href) {
-                log('URL hat sich geändert', currentUrl, '->', location.href);
+                logStatus('URL hat sich geändert', currentUrl, '->', location.href);
                 currentUrl = location.href;
                 buttonShown = false;
+                // Bei URL-Änderung Cache für wiederholte Meldungen zurücksetzen
+                lastStatusMessages = {};
             }
             
             checkForStoryAndAddButton();
@@ -247,17 +630,21 @@
         history.pushState = function() {
             originalPushState.apply(this, arguments);
             
-            log('pushState erkannt');
+            logStatus('pushState erkannt');
             currentUrl = location.href;
             buttonShown = false;
+            // Bei URL-Änderung Cache für wiederholte Meldungen zurücksetzen
+            lastStatusMessages = {};
             setTimeout(checkForStoryAndAddButton, 500);
         };
         
         // Zurück-Button überwachen
         window.addEventListener('popstate', () => {
-            log('popstate erkannt');
+            logStatus('popstate erkannt');
             currentUrl = location.href;
             buttonShown = false;
+            // Bei URL-Änderung Cache für wiederholte Meldungen zurücksetzen
+            lastStatusMessages = {};
             setTimeout(checkForStoryAndAddButton, 500);
         });
     }
