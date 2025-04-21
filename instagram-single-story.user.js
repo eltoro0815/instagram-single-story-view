@@ -486,17 +486,9 @@
         
         // Wenn wir bereits auf der richtigen URL sind, nichts tun
         if (isAlreadyOnSingleViewUrl(username, storyId)) {
-            // Selbst wenn die URL korrekt ist, könnte Instagram dennoch ein Karussell anzeigen
-            // Also prüfen wir noch einmal explizit die DOM-Struktur
-            if (!isCarouselView()) {
-                log('Bereits auf der korrekten Einzelansicht-URL und in echter Einzelansicht');
-                isInSingleView = true;
-                return;
-            } else {
-                log('Korrekte URL aber immer noch Karussell-Ansicht - versuche erneute Umleitung');
-                // Füge einen Parameter hinzu, um die URL leicht zu verändern und einen Reload zu erzwingen
-                storyId = storyId + "?force=true&r=" + Math.random();
-            }
+            log('Bereits auf der korrekten Einzelansicht-URL');
+            isInSingleView = true;
+            return;
         }
         
         // Prüfe Cooldown, um zu viele Weiterleitungen zu vermeiden
@@ -520,9 +512,6 @@
         buttonClicked = true;
         
         try {
-            // Speichere die aktuelle URL, um einen Vergleich später zu ermöglichen
-            const originalUrl = window.location.href;
-            
             // Deaktiviere temporär den MutationObserver, um Endlosschleifen zu vermeiden
             if (window.instagramSingleStoryObserver) {
                 window.instagramSingleStoryObserver.disconnect();
@@ -681,18 +670,13 @@
                 return;
             }
             
-            // Stelle sicher, dass wir durch die URL ohne Story-ID nicht durchrutschen
+            // URL ohne Story-ID erkannt, zeige Button an
             if (!isFullStoryUrl()) {
                 log('URL ohne Story-ID erkannt, zeige Button an');
                 const storyId = extractStoryIdFromDOM();
                 if (storyId) {
                     log(`Story-ID aus DOM gefunden: ${storyId}`);
                     updateButtonState(true, storyId);
-                    
-                    // Automatische Umleitung bei ID-Fund
-                    if (!buttonClicked) {
-                        redirectToSingleStoryView(username, storyId);
-                    }
                 } else if (retryCount < MAX_RETRIES) {
                     // Wenn keine Story-ID gefunden wurde, erneut versuchen
                     log(`Konnte keine Story-ID finden. Versuche erneut (${retryCount + 1}/${MAX_RETRIES})...`);
@@ -712,8 +696,7 @@
             const urlStoryId = extractStoryIdFromUrl();
             debugLog(`Story-ID aus URL: ${urlStoryId || 'keine'}`);
             
-            // WICHTIG: Prüfe immer die tatsächliche DOM-Struktur, da Instagram manchmal
-            // trotz korrekter URL ein Karussell anzeigt
+            // WICHTIG: Prüfe immer die tatsächliche DOM-Struktur
             const carousel = isCarouselView();
             debugLog(`Karussell-Ansicht erkannt: ${carousel}`);
             
@@ -732,35 +715,9 @@
                     existingButton.remove();
                     buttonShown = false;
                 }
-                
-                isProcessing = false;
-                return;
             }
             
-            // Wenn wir ein Karussell erkennen, versuchen wir eine Umleitung
-            if (carousel && !buttonClicked) {
-                log('Karussell-Ansicht erkannt, versuche automatische Umleitung');
-                
-                // Versuchen, die aktuelle Story-ID zu finden
-                const storyId = extractStoryIdFromDOM() || urlStoryId;
-                
-                if (storyId) {
-                    log(`Story-ID gefunden: ${storyId}`);
-                    isProcessing = false;
-                    redirectToSingleStoryView(username, storyId);
-                } else if (retryCount < MAX_RETRIES) {
-                    // Wenn keine Story-ID gefunden wurde, erneut versuchen
-                    log(`Konnte keine Story-ID finden. Versuche erneut (${retryCount + 1}/${MAX_RETRIES})...`);
-                    isProcessing = false;
-                    setTimeout(() => processSingleStoryView(retryCount + 1), RETRY_INTERVAL);
-                } else {
-                    // Maximale Anzahl von Versuchen erreicht, nur Button anzeigen
-                    log('Konnte keine Story-ID automatisch finden. Bitte den Button verwenden.');
-                    isProcessing = false;
-                }
-            } else {
-                isProcessing = false;
-            }
+            isProcessing = false;
         } catch (e) {
             log(`Fehler bei der Verarbeitung: ${e.message}`);
             isProcessing = false;
