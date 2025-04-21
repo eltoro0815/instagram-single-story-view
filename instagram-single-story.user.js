@@ -14,12 +14,13 @@
 
 (function() {
     'use strict';
-    
+
     // Konfiguration
     const DEBUG = true;               // Ausführliche Logs in der Konsole
     const CHECK_INTERVAL = 250;       // Prüfintervall in ms
     const COOLDOWN = 2000;            // Cooldown zwischen Aktionen in ms
     const RESEARCH_MODE = true;       // Aktiviert den Research-Modus
+    const FORCE_RESEARCH = true;      // Erzwingt die Durchführung des Research-Modus bei jedem Seitenaufruf
     
     // Status-Tracking
     let buttonShown = false;
@@ -63,6 +64,7 @@
     
     // Research-Logger - immer ausgeben, um DOM-Strukturen zu analysieren
     const logResearch = (...args) => {
+        // Immer in die Konsole schreiben, unabhängig vom DEBUG-Flag
         console.log('[ISV-RESEARCH]', ...args);
         
         // Speichere alle Research-Ausgaben für die Zwischenablage
@@ -86,6 +88,7 @@
     // Hilfsfunktion zum Kopieren in die Zwischenablage
     function copyResearchToClipboard() {
         if (!window.isvResearchData || window.isvResearchData.length === 0) {
+            console.warn('[ISV] Keine Research-Daten zum Kopieren vorhanden.');
             return;
         }
         
@@ -174,6 +177,39 @@
         document.body.removeChild(textarea);
     }
     
+    // Button zum manuellen Starten des Research-Modus
+    function addResearchButton() {
+        if (document.getElementById('isv-research-button')) {
+            return;
+        }
+        
+        const button = document.createElement('button');
+        button.id = 'isv-research-button';
+        button.textContent = 'Instagram DOM Research';
+        button.style.cssText = `
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 999999;
+            background: rgba(128, 0, 128, 0.7);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: Arial, sans-serif;
+            transition: opacity 0.3s;
+        `;
+        
+        button.addEventListener('click', function() {
+            researchDone = false;  // Reset, damit es erneut ausgeführt werden kann
+            researchInstagramDOM();
+        });
+        
+        document.body.appendChild(button);
+    }
+    
     // Hilfsfunktion zum Sammeln von Klassennamen
     function collectClasses(elements) {
         const classMap = {};
@@ -191,9 +227,11 @@
     
     // Führt Research für Instagram-DOM durch
     function researchInstagramDOM() {
-        if (researchDone || !RESEARCH_MODE) return;
+        if (researchDone && !FORCE_RESEARCH) return;
         
         try {
+            console.clear(); // Konsole leeren für bessere Übersicht
+            
             // Zurücksetzen der Research-Daten
             window.isvResearchData = [];
             
@@ -230,14 +268,14 @@
             // Sortiere nach Häufigkeit
             const sortedClasses = Object.entries(classMap)
                 .sort((a, b) => b[1] - a[1])
-                .slice(0, 20);
+                .slice(0, 50); // Erhöhen auf 50 für mehr Daten
             
-            logResearch('Top 20 Klassennamen:', sortedClasses);
+            logResearch('Top 50 Klassennamen:', sortedClasses);
             
             // Suche nach Story-spezifischen Elementen
             const classPatterns = [
                 /story/i, /carousel/i, /slider/i, /navigation/i, /progress/i, 
-                /next/i, /prev/i, /swipe/i, /viewer/i, /tray/i
+                /next/i, /prev/i, /swipe/i, /viewer/i, /tray/i, /pager/i, /dots/i
             ];
             
             const storyRelatedClasses = {};
@@ -265,10 +303,15 @@
                     
                     if (isLeftOrRight && isTallEnough) {
                         potentialNavContainers.push({
-                            element: div,
                             position: rect.left < 100 ? 'links' : 'rechts',
                             classes: div.className,
-                            children: div.children.length
+                            children: div.children.length,
+                            rect: {
+                                left: rect.left,
+                                top: rect.top,
+                                width: rect.width,
+                                height: rect.height
+                            }
                         });
                     }
                 }
@@ -314,6 +357,58 @@
             
             logResearch(`${svgData.length} relevante SVG-Elemente gefunden:`, svgData);
             
+            // Identifiziere potenziell wichtige Elemente für die Story-Navigation
+            const navElements = [...document.querySelectorAll('button, [role="button"], [tabindex="0"]')];
+            const positionedNavElements = navElements.map(el => {
+                const rect = el.getBoundingClientRect();
+                const isLeftSide = rect.left < window.innerWidth * 0.3;
+                const isRightSide = rect.right > window.innerWidth * 0.7;
+                
+                if ((isLeftSide || isRightSide) && rect.height > 100) {
+                    return {
+                        element: el.tagName,
+                        position: isLeftSide ? 'links' : 'rechts',
+                        classes: el.className,
+                        ariaLabel: el.getAttribute('aria-label'),
+                        role: el.getAttribute('role'),
+                        rect: {
+                            left: rect.left,
+                            top: rect.top,
+                            width: rect.width,
+                            height: rect.height
+                        }
+                    };
+                }
+                return null;
+            }).filter(Boolean);
+            
+            logResearch('Potenzielle Navigations-Elemente:', positionedNavElements);
+            
+            // Analysiere die DOM-Struktur auf typische Story-Container-Elemente
+            const storyContainers = [...document.querySelectorAll('div')].filter(div => {
+                const className = div.className || '';
+                return /story|viewer|carousel|swipe|slider|tray/i.test(className);
+            }).map(el => ({
+                tagName: el.tagName,
+                classes: el.className,
+                children: el.children.length,
+                rect: el.getBoundingClientRect()
+            }));
+            
+            logResearch('Story-Container-Elemente:', storyContainers);
+            
+            // Analysiere strukturierte Elemente mit mehreren Kindern (könnte ein Indikator für Stories sein)
+            const multiChildElements = [...document.querySelectorAll('div, section, nav')].filter(el => 
+                el.children.length > 3 && el.children.length < 20
+            ).map(el => ({
+                tagName: el.tagName,
+                classes: el.className,
+                childCount: el.children.length,
+                rect: el.getBoundingClientRect()
+            }));
+            
+            logResearch('Strukturierte Container mit mehreren Kindern:', multiChildElements.slice(0, 20));
+            
             logResearch('---- INSTAGRAM DOM RESEARCH ABGESCHLOSSEN ----');
             
             // In die Zwischenablage kopieren
@@ -333,16 +428,16 @@
     function isStoryPage() {
         return window.location.pathname.startsWith('/stories/');
     }
-    
+
     function isFullStoryUrl() {
         return /\/stories\/[^\/]+\/\d+/.test(window.location.pathname);
     }
-    
+
     function extractUsername() {
         const match = window.location.pathname.match(/\/stories\/([^\/]+)/);
         return match ? match[1] : null;
     }
-    
+
     function extractStoryId() {
         // Aus URL extrahieren
         const match = window.location.pathname.match(/\/stories\/[^\/]+\/(\d+)/);
@@ -567,6 +662,11 @@
         }
         
         log('Story-Seite erkannt');
+        
+        // Research-Button immer hinzufügen, wenn wir auf einer Story-Seite sind
+        if (RESEARCH_MODE) {
+            addResearchButton();
+        }
         
         // Research durchführen, wenn noch nicht geschehen
         if (RESEARCH_MODE && !researchDone && document.readyState === 'complete') {
