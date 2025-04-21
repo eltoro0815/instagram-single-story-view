@@ -602,7 +602,119 @@
             .map(entry => entry[0]);
     }
 
-    // Neue Funktion, die nur die ID aus der URL oder dem og:url Meta-Tag extrahiert
+    // Neue Funktion für tiefe DOM-Suche nach Story-IDs
+    function searchDOMForStoryIds() {
+        console.log("[ISV-DEBUG] Führe tiefe DOM-Suche nach Story-IDs durch");
+        const foundIds = new Map(); // Verwende Map für Eindeutigkeit und Häufigkeitszählung
+        
+        try {
+            // 1. Suche in allen data-* Attributen
+            const elementsWithDataAttr = document.querySelectorAll('[data-id], [data-item-id], [data-media-id], [data-post-id], [data-story-id], [data-story-media-id], [data-reel-id]');
+            
+            elementsWithDataAttr.forEach(el => {
+                ['data-id', 'data-item-id', 'data-media-id', 'data-post-id', 'data-story-id', 'data-story-media-id', 'data-reel-id'].forEach(attr => {
+                    const value = el.getAttribute(attr);
+                    if (value && /^\d{15,25}$/.test(value)) {
+                        console.log(`[ISV-DEBUG] Mögliche Story-ID in ${attr} gefunden:`, value);
+                        foundIds.set(value, (foundIds.get(value) || 0) + 1);
+                    }
+                });
+            });
+            
+            // 2. Suche in eingebetteten script-Tags mit JSON-Daten
+            const scriptTags = document.querySelectorAll('script:not([src])');
+            scriptTags.forEach(script => {
+                const content = script.textContent || '';
+                
+                // Suche nach JSON-Daten
+                if (content.includes('"id":') || content.includes('"story_id":') || content.includes('"media_id":')) {
+                    // Extrahiere alle 19-stelligen Zahlen (typische Story-ID-Länge)
+                    const matches = content.match(/\d{19}/g) || [];
+                    matches.forEach(id => {
+                        console.log("[ISV-DEBUG] Mögliche Story-ID in script-Tag gefunden:", id);
+                        foundIds.set(id, (foundIds.get(id) || 0) + 1);
+                    });
+                    
+                    // Versuche, JSON-Objekte zu parsen
+                    try {
+                        // Suche nach JSON-Objekten in der Form { ... }
+                        const jsonMatches = content.match(/\{[\s\S]*?\}/g) || [];
+                        
+                        jsonMatches.forEach(jsonStr => {
+                            try {
+                                const data = JSON.parse(jsonStr);
+                                // Suche nach IDs in der JSON-Struktur
+                                const extractedIds = extractIdsFromObject(data);
+                                extractedIds.forEach(id => {
+                                    if (id && id.length === 19) {
+                                        console.log("[ISV-DEBUG] Story-ID aus JSON extrahiert:", id);
+                                        foundIds.set(id, (foundIds.get(id) || 0) + 3); // Höhere Gewichtung für JSON-Daten
+                                    }
+                                });
+                            } catch (e) {
+                                // Ignoriere ungültiges JSON
+                            }
+                        });
+                    } catch (e) {
+                        console.log("[ISV-DEBUG] Fehler beim Parsen der JSON-Daten:", e.message);
+                    }
+                }
+            });
+            
+            // 3. Suche in window.__additionalDataLoaded
+            // Instagram speichert manchmal Daten in diesem Objekt
+            if (typeof unsafeWindow !== 'undefined' && unsafeWindow.__additionalDataLoaded) {
+                console.log("[ISV-DEBUG] __additionalDataLoaded gefunden, durchsuche nach Story-IDs");
+                const extractedIds = extractIdsFromObject(unsafeWindow.__additionalDataLoaded);
+                extractedIds.forEach(id => {
+                    if (id && id.length === 19) {
+                        console.log("[ISV-DEBUG] Story-ID aus __additionalDataLoaded extrahiert:", id);
+                        foundIds.set(id, (foundIds.get(id) || 0) + 5); // Höchste Gewichtung für diese Quelle
+                    }
+                });
+            }
+            
+            // Konvertiere zu Array und sortiere nach Häufigkeit (häufigere IDs priorisieren)
+            const sortedIds = Array.from(foundIds.entries())
+                .sort((a, b) => b[1] - a[1])
+                .map(entry => entry[0]);
+                
+            if (sortedIds.length > 0) {
+                console.log("[ISV-DEBUG] Gefundene Story-IDs (sortiert nach Relevanz):", sortedIds);
+                return sortedIds;
+            }
+        } catch (error) {
+            console.error("[ISV-DEBUG] Fehler bei der DOM-Suche:", error);
+        }
+        
+        return [];
+    }
+
+    // Hilfsfunktion zum Extrahieren von IDs aus JavaScript-Objekten
+    function extractIdsFromObject(obj, ids = new Set()) {
+        if (!obj || typeof obj !== 'object') return ids;
+        
+        // Direkte ID-Eigenschaften prüfen
+        const idProps = ['id', 'storyId', 'story_id', 'mediaId', 'media_id', 'reelId', 'reel_id', 'itemId', 'item_id'];
+        
+        for (const prop in obj) {
+            const value = obj[prop];
+            
+            // Prüfe, ob die Eigenschaft eine ID sein könnte
+            if (idProps.includes(prop) && typeof value === 'string' && /^\d{15,25}$/.test(value)) {
+                ids.add(value);
+            }
+            
+            // Rekursiv in verschachtelten Objekten und Arrays suchen
+            if (value && typeof value === 'object') {
+                extractIdsFromObject(value, ids);
+            }
+        }
+        
+        return Array.from(ids);
+    }
+
+    // Neue Funktion, die in URL, Meta-Tags und dann tief im DOM nach der ID sucht
     function extractStoryId() {
         // 1. Zuerst in der aktuellen URL suchen
         const urlStoryId = analyzeUrlForStoryIds(window.location.href);
@@ -614,24 +726,26 @@
         // 2. Wenn in URL nicht gefunden, im og:url Meta-Tag suchen
         const ogUrlMeta = document.querySelector('meta[property="og:url"], meta[name="og:url"]');
         
-        if (!ogUrlMeta) {
-            console.log("[ISV-DEBUG] Kein og:url Meta-Tag gefunden");
-            return null;
+        if (ogUrlMeta) {
+            const content = ogUrlMeta.getAttribute('content') || '';
+            if (content) {
+                const metaStoryId = analyzeUrlForStoryIds(content);
+                if (metaStoryId) {
+                    console.log("[ISV-DEBUG] Story-ID aus og:url Meta-Tag extrahiert:", metaStoryId);
+                    return metaStoryId;
+                }
+            }
         }
         
-        const content = ogUrlMeta.getAttribute('content') || '';
-        if (!content) {
-            console.log("[ISV-DEBUG] og:url Meta-Tag hat keinen Inhalt");
-            return null;
+        // 3. Tiefe DOM-Suche
+        const domIds = searchDOMForStoryIds();
+        if (domIds.length > 0) {
+            // Nehme die am häufigsten vorkommende ID (erste in der sortierten Liste)
+            console.log("[ISV-DEBUG] Verwende Story-ID aus DOM-Analyse:", domIds[0]);
+            return domIds[0];
         }
         
-        const metaStoryId = analyzeUrlForStoryIds(content);
-        if (metaStoryId) {
-            console.log("[ISV-DEBUG] Story-ID aus og:url Meta-Tag extrahiert:", metaStoryId);
-            return metaStoryId;
-        }
-        
-        console.log("[ISV-DEBUG] Keine gültige Story-ID in URL oder og:url Meta-Tag gefunden");
+        console.log("[ISV-DEBUG] Keine gültige Story-ID gefunden");
         return null;
     }
 
