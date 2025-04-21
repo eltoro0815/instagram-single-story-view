@@ -602,9 +602,16 @@
             .map(entry => entry[0]);
     }
 
-    // Neue Funktion, die nur die ID aus dem og:url Meta-Tag extrahiert
+    // Neue Funktion, die nur die ID aus der URL oder dem og:url Meta-Tag extrahiert
     function extractStoryId() {
-        // Nur in og:url Meta-Tag suchen
+        // 1. Zuerst in der aktuellen URL suchen
+        const urlStoryId = analyzeUrlForStoryIds(window.location.href);
+        if (urlStoryId) {
+            console.log("[ISV-DEBUG] Story-ID aus URL extrahiert:", urlStoryId);
+            return urlStoryId;
+        }
+        
+        // 2. Wenn in URL nicht gefunden, im og:url Meta-Tag suchen
         const ogUrlMeta = document.querySelector('meta[property="og:url"], meta[name="og:url"]');
         
         if (!ogUrlMeta) {
@@ -618,13 +625,13 @@
             return null;
         }
         
-        const storyId = analyzeUrlForStoryIds(content);
-        if (storyId) {
-            console.log("[ISV-DEBUG] Story-ID aus og:url Meta-Tag extrahiert:", storyId);
-            return storyId;
+        const metaStoryId = analyzeUrlForStoryIds(content);
+        if (metaStoryId) {
+            console.log("[ISV-DEBUG] Story-ID aus og:url Meta-Tag extrahiert:", metaStoryId);
+            return metaStoryId;
         }
         
-        console.log("[ISV-DEBUG] Keine gültige Story-ID im og:url Meta-Tag gefunden");
+        console.log("[ISV-DEBUG] Keine gültige Story-ID in URL oder og:url Meta-Tag gefunden");
         return null;
     }
 
@@ -831,8 +838,8 @@
                     button.textContent = 'Zur Einzelansicht';
                 }, 2000);
                 
-                // Hier den Alert hinzufügen
-                alert('Fehler: Keine gültige Story-ID im og:url Meta-Tag gefunden!');
+                // Alert-Nachricht aktualisieren
+                alert('Fehler: Keine gültige Story-ID in der URL oder im og:url Meta-Tag gefunden!');
                 
                 log('Keine Story-ID oder Username gefunden für Umleitung');
             }
