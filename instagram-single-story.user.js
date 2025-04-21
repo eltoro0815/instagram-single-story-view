@@ -19,24 +19,6 @@
 (function () {
     'use strict';
 
-    // Direkt als erstes den Menüeintrag registrieren
-    let menuCommandId = null;
-    try {
-        // Versuchen, das Menükommando zu registrieren - mit 'e' als Access Key
-        menuCommandId = GM_registerMenuCommand('Instagram Single Story View - Einstellungen', function() {
-            console.log('[ISV] Einstellungen-Dialog wird über Menü geöffnet');
-            if (typeof createSettingsUI === 'function') {
-                createSettingsUI();
-            } else {
-                console.error('[ISV] createSettingsUI ist noch nicht definiert');
-                alert('Die Einstellungen können noch nicht geöffnet werden. Bitte warte, bis die Seite vollständig geladen ist.');
-            }
-        }, 'e');
-        console.log('[ISV] Tampermonkey-Menüeintrag erfolgreich registriert mit ID:', menuCommandId);
-    } catch (error) {
-        console.error('[ISV] Fehler beim Registrieren des Tampermonkey-Menüeintrags:', error);
-    }
-
     // Konfiguration aus GM_getValue mit Standardwerten
     const getConfig = (key, defaultValue) => {
         return GM_getValue(key, defaultValue);
