@@ -274,15 +274,66 @@
         }, 500);
     }
 
+    // Button zum manuellen Starten der spezifischen ID-Suche
+    function addSpecificIdSearchButton() {
+        if (document.getElementById('isv-specific-id-search-button')) {
+            return;
+        }
+        
+        const button = document.createElement('button');
+        button.id = 'isv-specific-id-search-button';
+        button.textContent = 'Suche 3615862947608863320';
+        button.style.cssText = `
+            position: fixed;
+            top: 50px;
+            left: 10px;
+            z-index: 9999999;
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: Arial, sans-serif;
+            transition: opacity 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        `;
+        
+        button.addEventListener('click', function() {
+            searchForSpecificId('3615862947608863320');
+        });
+        
+        // Füge den Button direkt zum body hinzu
+        document.body.appendChild(button);
+        
+        // Stelle sicher, dass der Button sichtbar ist
+        setTimeout(() => {
+            if (document.getElementById('isv-specific-id-search-button')) {
+                document.getElementById('isv-specific-id-search-button').style.display = 'block';
+            }
+        }, 500);
+    }
+
     // Funktion, die den Research-Button zur Seite hinzufügt
     function ensureResearchButtonExists() {
         if (RESEARCH_MODE && !researchButtonAdded && document.body) {
             addResearchButton();
             logStatus('Research-Button zur Seite hinzugefügt');
+            
+            // Füge auch den spezifischen ID-Suchbutton hinzu
+            addSpecificIdSearchButton();
+            logStatus('Spezifischer ID-Suchbutton zur Seite hinzugefügt');
         } else if (!document.getElementById('isv-settings-button') && document.body) {
             // Stelle sicher, dass der Einstellungsbutton auch existiert, selbst wenn Research deaktiviert ist
             addSettingsButton();
             logStatus('Einstellungs-Button hinzugefügt');
+            
+            // Füge auch den spezifischen ID-Suchbutton hinzu, unabhängig vom Research-Modus
+            if (!document.getElementById('isv-specific-id-search-button')) {
+                addSpecificIdSearchButton();
+                logStatus('Spezifischer ID-Suchbutton zur Seite hinzugefügt');
+            }
         }
     }
 
@@ -616,7 +667,7 @@
                         if (urlMatches && urlMatches[1]) {
                             console.log(`[ISV-DEBUG] Story-ID in URL-Segment gefunden:`, urlMatches[1]);
                             foundIds.set(urlMatches[1], {
-                                weight: (foundIds.get(urlMatches[1])?.weight || 0) + 2, // Höhere Gewichtung
+                                weight: (foundIds.get(urlMatches[1])?.weight || 0) + 3, // Erhöhte Gewichtung für URL-Segmente
                                 source: `URL-Segment in ${attr.name}`
                             });
                         }
@@ -669,7 +720,7 @@
                                     if (id && id.length === 19) {
                                         console.log("[ISV-DEBUG] Story-ID aus JSON extrahiert:", id);
                                         foundIds.set(id, {
-                                            weight: (foundIds.get(id)?.weight || 0) + 3, // Höhere Gewichtung für JSON-Daten
+                                            weight: (foundIds.get(id)?.weight || 0) + 2, // Gewichtung für JSON-Daten angepasst
                                             source: `JSON-Daten in Script-Tag`
                                         });
                                     }
@@ -740,6 +791,144 @@
                     });
                 }
             });
+            
+            // 7. NEU: Suche in localStorage und sessionStorage
+            try {
+                // Durchsuche localStorage
+                for (let i = 0; i < localStorage.length; i++) {
+                    try {
+                        const key = localStorage.key(i);
+                        const value = localStorage.getItem(key);
+                        
+                        // Suche nach 19-stelligen Zahlen
+                        const matches = value.match(/\b\d{19}\b/g);
+                        if (matches) {
+                            matches.forEach(id => {
+                                console.log(`[ISV-DEBUG] Mögliche Story-ID in localStorage[${key}] gefunden:`, id);
+                                foundIds.set(id, {
+                                    weight: (foundIds.get(id)?.weight || 0) + 3,
+                                    source: `localStorage: ${key}`
+                                });
+                            });
+                        }
+                        
+                        // Versuche, JSON zu parsen
+                        try {
+                            const parsedValue = JSON.parse(value);
+                            const extractedIds = extractIdsFromObject(parsedValue);
+                            extractedIds.forEach(id => {
+                                if (id && id.length === 19) {
+                                    console.log(`[ISV-DEBUG] Story-ID aus localStorage[${key}] JSON extrahiert:`, id);
+                                    foundIds.set(id, {
+                                        weight: (foundIds.get(id)?.weight || 0) + 3,
+                                        source: `localStorage JSON: ${key}`
+                                    });
+                                }
+                            });
+                        } catch (e) {
+                            // Ignoriere ungültiges JSON
+                        }
+                    } catch (e) {
+                        // Ignoriere Fehler bei einzelnen localStorage-Items
+                    }
+                }
+                
+                // Durchsuche sessionStorage
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    try {
+                        const key = sessionStorage.key(i);
+                        const value = sessionStorage.getItem(key);
+                        
+                        // Suche nach 19-stelligen Zahlen
+                        const matches = value.match(/\b\d{19}\b/g);
+                        if (matches) {
+                            matches.forEach(id => {
+                                console.log(`[ISV-DEBUG] Mögliche Story-ID in sessionStorage[${key}] gefunden:`, id);
+                                foundIds.set(id, {
+                                    weight: (foundIds.get(id)?.weight || 0) + 3,
+                                    source: `sessionStorage: ${key}`
+                                });
+                            });
+                        }
+                        
+                        // Versuche, JSON zu parsen
+                        try {
+                            const parsedValue = JSON.parse(value);
+                            const extractedIds = extractIdsFromObject(parsedValue);
+                            extractedIds.forEach(id => {
+                                if (id && id.length === 19) {
+                                    console.log(`[ISV-DEBUG] Story-ID aus sessionStorage[${key}] JSON extrahiert:`, id);
+                                    foundIds.set(id, {
+                                        weight: (foundIds.get(id)?.weight || 0) + 3,
+                                        source: `sessionStorage JSON: ${key}`
+                                    });
+                                }
+                            });
+                        } catch (e) {
+                            // Ignoriere ungültiges JSON
+                        }
+                    } catch (e) {
+                        // Ignoriere Fehler bei einzelnen sessionStorage-Items
+                    }
+                }
+            } catch (e) {
+                console.log("[ISV-DEBUG] Fehler beim Durchsuchen von localStorage/sessionStorage:", e.message);
+            }
+            
+            // 8. NEU: Suche in Instagram's Modellen und API-Daten
+            try {
+                // Instagram speichert manchmal Daten in diesen spezifischen Objekten
+                const instagramKeys = ['__RELAY_STORE__', '__INITIAL_DATA__', 'REDUX_STATE', '_sharedData', 'require'];
+                
+                if (typeof unsafeWindow !== 'undefined') {
+                    for (const key of instagramKeys) {
+                        if (unsafeWindow[key]) {
+                            console.log(`[ISV-DEBUG] Instagram-spezifisches Objekt '${key}' gefunden`);
+                            const extractedIds = extractIdsFromObject(unsafeWindow[key]);
+                            extractedIds.forEach(id => {
+                                if (id && id.length === 19) {
+                                    console.log(`[ISV-DEBUG] Story-ID aus Instagram-Objekt ${key} extrahiert:`, id);
+                                    foundIds.set(id, {
+                                        weight: (foundIds.get(id)?.weight || 0) + 4, // Hohe Priorität für Instagram-Objekte
+                                        source: `Instagram ${key}`
+                                    });
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log("[ISV-DEBUG] Fehler beim Durchsuchen von Instagram-spezifischen Objekten:", e.message);
+            }
+            
+            // 9. NEU: Direktes Parsen vom HTML-Text für spezifische Strukturen
+            try {
+                const htmlContent = document.documentElement.outerHTML;
+                
+                // Spezifisches Format suchen: "mediaId":"XXXXXX" oder "story_media_id":"XXXXXX"
+                const mediaIdMatches = htmlContent.match(/["'](?:mediaId|story_media_id|media_id)["']\s*:\s*["'](\d{19})["']/g) || [];
+                mediaIdMatches.forEach(match => {
+                    const id = match.match(/(\d{19})/)[1];
+                    console.log("[ISV-DEBUG] Story-ID aus mediaId-Pattern im HTML gefunden:", id);
+                    foundIds.set(id, {
+                        weight: (foundIds.get(id)?.weight || 0) + 4,
+                        source: `mediaId-Pattern im HTML`
+                    });
+                });
+                
+                // Suche nach URLs im Format /stories/username/XXXXXX/
+                const storyUrlMatches = htmlContent.match(/\/stories\/[^\/]+\/(\d{19})\//g) || [];
+                storyUrlMatches.forEach(match => {
+                    const id = match.match(/(\d{19})/)[1];
+                    console.log("[ISV-DEBUG] Story-ID aus Story-URL-Pattern im HTML gefunden:", id);
+                    foundIds.set(id, {
+                        weight: (foundIds.get(id)?.weight || 0) + 5, // Höchste Priorität für direkte Story-URLs
+                        source: `Story-URL-Pattern im HTML`
+                    });
+                });
+            } catch (e) {
+                console.log("[ISV-DEBUG] Fehler beim Parsen spezieller Patterns im HTML:", e.message);
+            }
             
             // Konvertiere zu Array und sortiere nach Häufigkeit (häufigere IDs priorisieren)
             const sortedIds = Array.from(foundIds.entries())
@@ -1400,6 +1589,255 @@
             lastStatusMessages = {};
             setTimeout(checkForStoryAndAddButton, 500);
         });
+    }
+
+    // Funktion zum Suchen einer spezifischen ID im gesamten DOM
+    function searchForSpecificId(specificId) {
+        console.log(`[ISV-DEBUG] Starte gezielte Suche nach ID: ${specificId}`);
+        
+        // Ergebnisse sammeln
+        const results = [];
+        
+        // 1. Suche im HTML-Rohtext
+        const htmlContent = document.documentElement.outerHTML;
+        const htmlMatches = htmlContent.includes(specificId);
+        
+        if (htmlMatches) {
+            results.push({
+                source: "HTML-Gesamttext",
+                matches: true,
+                context: "Die ID kommt im HTML-Text vor"
+            });
+            
+            // Extrahiere Kontext um die ID herum
+            const indexOfId = htmlContent.indexOf(specificId);
+            const start = Math.max(0, indexOfId - 100);
+            const end = Math.min(htmlContent.length, indexOfId + specificId.length + 100);
+            const contextText = htmlContent.substring(start, end);
+            
+            results.push({
+                source: "HTML-Kontext",
+                context: contextText
+            });
+        } else {
+            results.push({
+                source: "HTML-Gesamttext",
+                matches: false,
+                context: "Die ID kommt im HTML-Text NICHT vor"
+            });
+        }
+        
+        // 2. Suche in allen Attributen
+        const elementsWithAttributes = document.querySelectorAll('*');
+        elementsWithAttributes.forEach((el, index) => {
+            if (!el.attributes) return;
+            
+            for (const attr of el.attributes) {
+                if (attr.value && attr.value.includes(specificId)) {
+                    results.push({
+                        source: `Element-Attribut [${index}]`,
+                        element: el.tagName,
+                        attribute: attr.name,
+                        value: attr.value,
+                        context: el.outerHTML.substring(0, 200) // Begrenze die Länge
+                    });
+                }
+            }
+        });
+        
+        // 3. Suche in allen Textinhalten
+        document.querySelectorAll('*').forEach((el, index) => {
+            if (el.textContent && el.textContent.includes(specificId) && !/^(script|style)$/i.test(el.tagName)) {
+                results.push({
+                    source: `Textinhalt [${index}]`,
+                    element: el.tagName,
+                    context: el.textContent.substring(0, 200) // Begrenze die Länge
+                });
+            }
+        });
+        
+        // 4. Suche in Script-Tags
+        document.querySelectorAll('script').forEach((script, index) => {
+            if (script.textContent && script.textContent.includes(specificId)) {
+                results.push({
+                    source: `Script-Tag [${index}]`,
+                    context: `Script-Text enthält die ID`
+                });
+                
+                // Versuche alle JSON-Objekte im Script zu finden, die die ID enthalten
+                const jsonMatches = script.textContent.match(/\{[^{]*?3615862947608863320[^}]*?\}/g) || [];
+                jsonMatches.forEach((match, i) => {
+                    results.push({
+                        source: `Script-Tag [${index}] JSON [${i}]`,
+                        context: match
+                    });
+                });
+            }
+        });
+        
+        // 5. Suche in localStorage und sessionStorage
+        try {
+            // Durchsuche localStorage
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                
+                if (value && value.includes(specificId)) {
+                    results.push({
+                        source: `localStorage [${key}]`,
+                        context: value.substring(0, 200) // Begrenze die Länge
+                    });
+                }
+            }
+            
+            // Durchsuche sessionStorage
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                const value = sessionStorage.getItem(key);
+                
+                if (value && value.includes(specificId)) {
+                    results.push({
+                        source: `sessionStorage [${key}]`,
+                        context: value.substring(0, 200) // Begrenze die Länge
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("[ISV-DEBUG] Fehler beim Durchsuchen von Storage:", e);
+        }
+        
+        // 6. Versuche, die ID in Window-Objekten zu finden
+        if (typeof unsafeWindow !== 'undefined') {
+            const windowObjectsToCheck = [
+                '__RELAY_STORE__', 
+                '__INITIAL_DATA__', 
+                'REDUX_STATE', 
+                '_sharedData', 
+                'require',
+                '__additionalDataLoaded'
+            ];
+            
+            for (const objName of windowObjectsToCheck) {
+                if (unsafeWindow[objName]) {
+                    try {
+                        const objString = JSON.stringify(unsafeWindow[objName]);
+                        if (objString.includes(specificId)) {
+                            results.push({
+                                source: `window.${objName}`,
+                                matches: true,
+                                context: `Die ID wurde in window.${objName} gefunden`
+                            });
+                            
+                            // Versuche, den genauen Pfad zu finden
+                            findPathToId(unsafeWindow[objName], specificId, `window.${objName}`, results);
+                        }
+                    } catch (e) {
+                        console.warn(`[ISV-DEBUG] Fehler beim Stringifizieren von window.${objName}:`, e);
+                    }
+                }
+            }
+        }
+        
+        // 7. Suche in URL
+        if (window.location.href.includes(specificId)) {
+            results.push({
+                source: "URL",
+                matches: true,
+                context: window.location.href
+            });
+        }
+        
+        // 8. Suche in Meta-Tags
+        document.querySelectorAll('meta').forEach((meta, index) => {
+            const content = meta.getAttribute('content');
+            if (content && content.includes(specificId)) {
+                results.push({
+                    source: `Meta-Tag [${index}]`,
+                    attribute: meta.getAttribute('name') || meta.getAttribute('property'),
+                    content: content
+                });
+            }
+        });
+        
+        // 9. Suche in XHR-Anfragen (experimentell)
+        // Die tatsächliche Implementierung erfordert ein tieferes Hooking des XMLHttpRequest-Objekts
+        
+        // Ausgabe der Ergebnisse
+        console.log(`[ISV-DEBUG] Suche nach ID ${specificId} abgeschlossen.`);
+        console.log(`[ISV-DEBUG] ${results.length} Treffer gefunden:`);
+        console.table(results);
+        
+        // Ergebnisse als Alert anzeigen
+        let alertText = `Suchergebnisse für ID ${specificId}:\n\n`;
+        
+        if (results.length === 0) {
+            alertText += "Keine Treffer gefunden. Die ID scheint nicht im DOM zu existieren.";
+        } else {
+            results.forEach((result, index) => {
+                alertText += `${index + 1}. ${result.source}:\n`;
+                if (result.element) alertText += `   Element: ${result.element}\n`;
+                if (result.attribute) alertText += `   Attribut: ${result.attribute}\n`;
+                if (result.context) {
+                    // Kürze den Kontext für das Alert-Fenster
+                    const shortContext = result.context.length > 100 
+                        ? result.context.substring(0, 100) + "..." 
+                        : result.context;
+                    alertText += `   Kontext: ${shortContext}\n`;
+                }
+                alertText += "\n";
+            });
+        }
+        
+        alert(alertText);
+        
+        return results;
+    }
+
+    // Hilfsfunktion zum Finden eines Pfades zu einer ID in einem komplexen Objekt
+    function findPathToId(obj, id, currentPath, results) {
+        if (!obj || typeof obj !== 'object') return;
+        
+        // Arrays und Objekte durchlaufen
+        if (Array.isArray(obj)) {
+            for (let i = 0; i < obj.length; i++) {
+                // Direkte Übereinstimmung prüfen
+                if (obj[i] === id || obj[i] === Number(id)) {
+                    results.push({
+                        source: `Pfad gefunden`,
+                        path: `${currentPath}[${i}]`,
+                        value: obj[i]
+                    });
+                }
+                // Rekursiv weitermachen, aber Tiefenbegrenzung einbauen
+                if (typeof obj[i] === 'object' && obj[i] !== null && currentPath.split('.').length < 10) {
+                    findPathToId(obj[i], id, `${currentPath}[${i}]`, results);
+                }
+            }
+        } else {
+            for (const key in obj) {
+                // Direkte Übereinstimmung prüfen
+                if (obj[key] === id || obj[key] === Number(id)) {
+                    results.push({
+                        source: `Pfad gefunden`,
+                        path: `${currentPath}.${key}`,
+                        value: obj[key]
+                    });
+                }
+                // Auch den Key selbst prüfen
+                if (key === id) {
+                    results.push({
+                        source: `Key gefunden`,
+                        path: `${currentPath}`,
+                        key: key,
+                        value: obj[key]
+                    });
+                }
+                // Rekursiv weitermachen, aber Tiefenbegrenzung einbauen
+                if (typeof obj[key] === 'object' && obj[key] !== null && currentPath.split('.').length < 10) {
+                    findPathToId(obj[key], id, `${currentPath}.${key}`, results);
+                }
+            }
+        }
     }
 
     // Skript starten
