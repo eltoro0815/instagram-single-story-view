@@ -84,6 +84,17 @@
         `;
         dialog.appendChild(title);
         
+        // Versionsanzeige hinzufügen
+        const versionInfo = document.createElement('div');
+        versionInfo.textContent = 'Version: ' + GM_info.script.version;
+        versionInfo.style.cssText = `
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #666;
+            font-style: italic;
+        `;
+        dialog.appendChild(versionInfo);
+        
         // Einstellungen erstellen
         const createSetting = (id, label, value, type = 'checkbox') => {
             const container = document.createElement('div');
