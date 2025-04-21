@@ -702,7 +702,11 @@
             const patterns = [
                 /\/stories\/[^\/]+\/(\d+)/, // Story URL Format
                 /stories%2F[^%]+%2F(\d+)/,  // Encoded Story URL
-                /(\d{15,25})/              // Lange Zahlen sind oft IDs
+                /instagram\.com\/stories\/[^\/]+\/(\d+)/, // Volle URL 
+                /instagram\.com%2Fstories%2F[^%]+%2F(\d+)/, // Encoded volle URL
+                /stories\/highlights\/(\d+)/, // Highlights URL
+                /reel\/(\d+)/, // Reels haben auch IDs, die manchmal für Stories verwendet werden
+                /\/(\d{15,25})(?:\?|\/|$)/ // Lange Zahlen-IDs, aber nur am Ende der URL oder vor ? oder /
             ];
 
             for (const pattern of patterns) {
@@ -714,6 +718,47 @@
                         return match[1];
                     }
                 }
+            }
+        }
+
+        // Suche in Meta-Tags nach Story-ID
+        const metaTags = document.querySelectorAll('meta[property^="og:"], meta[name^="og:"]');
+        for (const meta of metaTags) {
+            const content = meta.getAttribute('content') || '';
+            if (!content) continue;
+            
+            log('Prüfe Meta-Tag:', content);
+            
+            // Suche nach Story-ID in meta tags
+            const patterns = [
+                /\/stories\/[^\/]+\/(\d+)/, 
+                /instagram\.com\/stories\/[^\/]+\/(\d+)/
+            ];
+            
+            for (const pattern of patterns) {
+                const match = content.match(pattern);
+                if (match && match[1]) {
+                    if (match[1].length >= 5 && match[1].length <= 25) {
+                        log('Story-ID in Meta-Tag gefunden:', match[1]);
+                        return match[1];
+                    }
+                }
+            }
+        }
+        
+        // In mobilem DOM nach Item-IDs suchen (Instagram verwendet oft data-* Attribute)
+        const possibleItemElements = document.querySelectorAll('[data-id], [data-item-id], [data-media-id], [id^="story-"]');
+        for (const element of possibleItemElements) {
+            const id = element.getAttribute('data-id') || element.getAttribute('data-item-id') || 
+                       element.getAttribute('data-media-id') || element.id;
+            
+            if (!id) continue;
+            
+            // Numerische ID extrahieren
+            const numericId = id.match(/(\d{5,25})/);
+            if (numericId && numericId[1]) {
+                log('Story-ID in DOM-Element Attribut gefunden:', numericId[1]);
+                return numericId[1];
             }
         }
 
