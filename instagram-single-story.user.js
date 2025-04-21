@@ -37,181 +37,93 @@
     let COOLDOWN = getConfig('COOLDOWN', 2000);          // Cooldown zwischen Aktionen in ms
     let RESEARCH_MODE = getConfig('RESEARCH_MODE', true); // Aktiviert den Research-Modus
     let FORCE_RESEARCH = getConfig('FORCE_RESEARCH', true); // Erzwingt die Durchführung des Research-Modus
+    let PRESERVE_LOGS = getConfig('PRESERVE_LOGS', true);  // Speichert Logs über Seitennavigation hinweg
+
+    // Funktionen für persistente Logs
+    const LOG_STORAGE_KEY = 'isv_persistent_logs';
+    const MAX_STORED_LOGS = 200; // Maximale Anzahl gespeicherter Logs
+
+    // Logs aus dem localStorage laden
+    function loadStoredLogs() {
+        try {
+            const storedLogs = localStorage.getItem(LOG_STORAGE_KEY);
+            if (storedLogs) {
+                const logs = JSON.parse(storedLogs);
+                
+                if (DEBUG && PRESERVE_LOGS) {
+                    console.log('[ISV] ---------- GESPEICHERTE LOGS VON VORHERIGEN SEITENAUFRUFEN ----------');
+                    logs.forEach(entry => {
+                        if (entry.type === 'log') {
+                            console.log(`[ISV][${entry.time}] ${entry.message}`);
+                        } else if (entry.type === 'warn') {
+                            console.warn(`[ISV][${entry.time}] ${entry.message}`);
+                        } else if (entry.type === 'error') {
+                            console.error(`[ISV][${entry.time}] ${entry.message}`);
+                        } else if (entry.type === 'research') {
+                            console.log(`[ISV-RESEARCH][${entry.time}] ${entry.message}`);
+                        } else if (entry.type === 'status') {
+                            console.log(`[ISV][${entry.time}] ${entry.message}`);
+                        }
+                    });
+                    console.log('[ISV] ---------- ENDE DER GESPEICHERTEN LOGS ----------');
+                }
+                
+                return logs;
+            }
+        } catch (e) {
+            console.error('[ISV] Fehler beim Laden der gespeicherten Logs:', e);
+        }
+        return [];
+    }
+
+    // Log im localStorage speichern
+    function storeLog(type, message) {
+        if (!PRESERVE_LOGS) return;
+        
+        try {
+            let logs = loadStoredLogs();
+            const now = new Date();
+            const timeString = now.toISOString().replace('T', ' ').substring(0, 19);
+            
+            // Neuen Log-Eintrag hinzufügen
+            logs.push({
+                type: type,
+                message: message,
+                time: timeString,
+                url: window.location.href
+            });
+            
+            // Begrenze die Anzahl der Logs
+            if (logs.length > MAX_STORED_LOGS) {
+                logs = logs.slice(logs.length - MAX_STORED_LOGS);
+            }
+            
+            // Logs speichern
+            localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logs));
+        } catch (e) {
+            console.error('[ISV] Fehler beim Speichern des Logs:', e);
+        }
+    }
+
+    // Alle Logs löschen
+    function clearStoredLogs() {
+        try {
+            localStorage.removeItem(LOG_STORAGE_KEY);
+            console.log('[ISV] Alle gespeicherten Logs wurden gelöscht');
+        } catch (e) {
+            console.error('[ISV] Fehler beim Löschen der Logs:', e);
+        }
+    }
 
     // Wichtige Statusänderungen immer loggen
     const logStatus = (...args) => {
         if (DEBUG) {
+            const message = args.join(' ');
             console.log('[ISV]', ...args);
+            storeLog('status', message);
         }
     };
 
-    // Einstellungen-Dialog zum Bearbeiten der Konfiguration
-    const createSettingsUI = () => {
-        console.log('[ISV] Einstellungen-Dialog wird geöffnet');
-        
-        // Entferne vorhandenen Dialog, falls vorhanden
-        const existingDialog = document.getElementById('isv-settings');
-        if (existingDialog) existingDialog.remove();
-        
-        // Dialog erstellen
-        const dialog = document.createElement('div');
-        dialog.id = 'isv-settings';
-        dialog.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            padding: 20px;
-            z-index: 9999999;
-            width: 400px;
-            font-family: Arial, sans-serif;
-            color: #121212; /* Dunklerer Text für bessere Lesbarkeit */
-        `;
-        
-        // Titel
-        const title = document.createElement('h2');
-        title.textContent = 'Instagram Single Story View - Einstellungen';
-        title.style.cssText = `
-            margin-top: 0;
-            margin-bottom: 15px;
-            font-size: 18px;
-            border-bottom: 1px solid #ccc;
-            padding-bottom: 10px;
-            color: #000; /* Schwarzer Text für den Titel */
-            font-weight: bold;
-        `;
-        dialog.appendChild(title);
-        
-        // Versionsanzeige hinzufügen
-        const versionInfo = document.createElement('div');
-        versionInfo.textContent = 'Version: ' + GM_info.script.version;
-        versionInfo.style.cssText = `
-            margin-bottom: 15px;
-            font-size: 14px;
-            color: #666;
-            font-style: italic;
-        `;
-        dialog.appendChild(versionInfo);
-        
-        // Einstellungen erstellen
-        const createSetting = (id, label, value, type = 'checkbox') => {
-            const container = document.createElement('div');
-            container.style.cssText = 'margin-bottom: 15px;';
-            
-            const labelEl = document.createElement('label');
-            labelEl.setAttribute('for', id);
-            labelEl.style.cssText = 'display: block; margin-bottom: 5px; font-weight: bold; color: #000;'; /* Schwarzer Text für Labels */
-            labelEl.textContent = label;
-            
-            const input = document.createElement('input');
-            input.id = id;
-            input.type = type;
-            if (type === 'checkbox') {
-                input.checked = value;
-                input.style.cssText = 'margin-right: 10px; transform: scale(1.2);'; /* Größere Checkbox */
-            } else {
-                input.value = value;
-                input.style.cssText = 'width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #aaa; color: #000; background: #fff;'; /* Bessere Eingabefelder */
-            }
-            
-            container.appendChild(labelEl);
-            container.appendChild(input);
-            return container;
-        };
-        
-        // Einstellungen hinzufügen
-        dialog.appendChild(createSetting('isv-debug', 'Debug-Modus aktivieren', DEBUG));
-        dialog.appendChild(createSetting('isv-check-interval', 'Prüfintervall (ms)', CHECK_INTERVAL, 'number'));
-        dialog.appendChild(createSetting('isv-cooldown', 'Cooldown zwischen Aktionen (ms)', COOLDOWN, 'number'));
-        dialog.appendChild(createSetting('isv-research-mode', 'Research-Modus aktivieren', RESEARCH_MODE));
-        dialog.appendChild(createSetting('isv-force-research', 'Research-Modus bei jedem Seitenaufruf ausführen', FORCE_RESEARCH));
-        
-        // Buttons
-        const buttonsContainer = document.createElement('div');
-        buttonsContainer.style.cssText = 'display: flex; justify-content: flex-end; margin-top: 20px;';
-        
-        const cancelButton = document.createElement('button');
-        cancelButton.textContent = 'Abbrechen';
-        cancelButton.style.cssText = `
-            padding: 8px 15px;
-            margin-right: 10px;
-            border: none;
-            background: #ddd;
-            color: #333;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        `;
-        cancelButton.onclick = () => dialog.remove();
-        
-        const saveButton = document.createElement('button');
-        saveButton.textContent = 'Speichern';
-        saveButton.style.cssText = `
-            padding: 8px 15px;
-            border: none;
-            background: #5a32a3;
-            color: white;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        `;
-        saveButton.onclick = () => {
-            // Einstellungen speichern
-            DEBUG = saveConfig('DEBUG', document.getElementById('isv-debug').checked);
-            CHECK_INTERVAL = saveConfig('CHECK_INTERVAL', parseInt(document.getElementById('isv-check-interval').value) || 250);
-            COOLDOWN = saveConfig('COOLDOWN', parseInt(document.getElementById('isv-cooldown').value) || 2000);
-            RESEARCH_MODE = saveConfig('RESEARCH_MODE', document.getElementById('isv-research-mode').checked);
-            FORCE_RESEARCH = saveConfig('FORCE_RESEARCH', document.getElementById('isv-force-research').checked);
-            
-            // Dialog schließen
-            dialog.remove();
-            
-            // Benachrichtigung anzeigen
-            const notification = document.createElement('div');
-            notification.textContent = 'Einstellungen gespeichert!';
-            notification.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                left: 20px;
-                background: rgba(90, 50, 163, 0.9);
-                color: white;
-                padding: 10px 15px;
-                border-radius: 4px;
-                z-index: 999999;
-                font-family: Arial, sans-serif;
-                font-weight: bold;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            `;
-            document.body.appendChild(notification);
-            
-            // Nach 3 Sekunden ausblenden
-            setTimeout(() => {
-                notification.style.opacity = '0';
-                notification.style.transition = 'opacity 0.5s';
-                setTimeout(() => notification.remove(), 500);
-            }, 3000);
-        };
-        
-        buttonsContainer.appendChild(cancelButton);
-        buttonsContainer.appendChild(saveButton);
-        dialog.appendChild(buttonsContainer);
-        
-        // Dialog zum DOM hinzufügen
-        document.body.appendChild(dialog);
-    };
-    
-    // Status-Tracking
-    let buttonShown = false;
-    let lastActionTime = 0;
-    let currentUrl = location.href;
-    let mainTimer = null;
-    let lastStatusMessages = {};     // Für das Tracking wiederholter Nachrichten
-    let researchDone = false;        // Vermeidet wiederholte Research-Ausführungen
-    let researchButtonAdded = false; // Verfolgt, ob der Research-Button bereits hinzugefügt wurde
-    
     // Logger-Funktion
     const log = (...args) => {
         if (DEBUG) {
@@ -223,6 +135,7 @@
                     return;
                 }
                 lastStatusMessages[message] = true;
+                storeLog('log', message);
             } else if (args.length === 2 && typeof args[1] === 'string') {
                 // Für Meldungen mit einem zusätzlichen String-Parameter
                 const key = args[0] + ' ' + args[1];
@@ -231,6 +144,20 @@
                     return;
                 }
                 lastStatusMessages[key] = true;
+                storeLog('log', args.join(' '));
+            } else {
+                // Für komplexere Meldungen
+                const message = args.map(arg => {
+                    if (typeof arg === 'object') {
+                        try {
+                            return JSON.stringify(arg);
+                        } catch (e) {
+                            return String(arg);
+                        }
+                    }
+                    return String(arg);
+                }).join(' ');
+                storeLog('log', message);
             }
             
             console.log('[ISV]', ...args);
@@ -241,6 +168,20 @@
     const logResearch = (...args) => {
         // Immer in die Konsole schreiben, unabhängig vom DEBUG-Flag
         console.log('[ISV-RESEARCH]', ...args);
+
+        // Log-Meldung speichern
+        const message = args.map(arg => {
+            if (typeof arg === 'object') {
+                try {
+                    return JSON.stringify(arg, null, 2);
+                } catch (e) {
+                    return String(arg);
+                }
+            }
+            return String(arg);
+        }).join(' ');
+        
+        storeLog('research', message);
 
         // Speichere alle Research-Ausgaben für die Zwischenablage
         if (!window.isvResearchData) {
@@ -1071,9 +1012,228 @@
         }
     }
 
+    // Einstellungen-Dialog zum Bearbeiten der Konfiguration
+    const createSettingsUI = () => {
+        console.log('[ISV] Einstellungen-Dialog wird geöffnet');
+        
+        // Entferne vorhandenen Dialog, falls vorhanden
+        const existingDialog = document.getElementById('isv-settings');
+        if (existingDialog) existingDialog.remove();
+        
+        // Dialog erstellen
+        const dialog = document.createElement('div');
+        dialog.id = 'isv-settings';
+        dialog.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            padding: 20px;
+            z-index: 9999999;
+            width: 400px;
+            font-family: Arial, sans-serif;
+            color: #121212; /* Dunklerer Text für bessere Lesbarkeit */
+        `;
+        
+        // Titel
+        const title = document.createElement('h2');
+        title.textContent = 'Instagram Single Story View - Einstellungen';
+        title.style.cssText = `
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 18px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 10px;
+            color: #000; /* Schwarzer Text für den Titel */
+            font-weight: bold;
+        `;
+        dialog.appendChild(title);
+        
+        // Versionsanzeige hinzufügen
+        const versionInfo = document.createElement('div');
+        versionInfo.textContent = 'Version: ' + GM_info.script.version;
+        versionInfo.style.cssText = `
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #666;
+            font-style: italic;
+        `;
+        dialog.appendChild(versionInfo);
+        
+        // Einstellungen erstellen
+        const createSetting = (id, label, value, type = 'checkbox') => {
+            const container = document.createElement('div');
+            container.style.cssText = 'margin-bottom: 15px;';
+            
+            const labelEl = document.createElement('label');
+            labelEl.setAttribute('for', id);
+            labelEl.style.cssText = 'display: block; margin-bottom: 5px; font-weight: bold; color: #000;'; /* Schwarzer Text für Labels */
+            labelEl.textContent = label;
+            
+            const input = document.createElement('input');
+            input.id = id;
+            input.type = type;
+            if (type === 'checkbox') {
+                input.checked = value;
+                input.style.cssText = 'margin-right: 10px; transform: scale(1.2);'; /* Größere Checkbox */
+            } else {
+                input.value = value;
+                input.style.cssText = 'width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #aaa; color: #000; background: #fff;'; /* Bessere Eingabefelder */
+            }
+            
+            container.appendChild(labelEl);
+            container.appendChild(input);
+            return container;
+        };
+        
+        // Einstellungen hinzufügen
+        dialog.appendChild(createSetting('isv-debug', 'Debug-Modus aktivieren', DEBUG));
+        dialog.appendChild(createSetting('isv-check-interval', 'Prüfintervall (ms)', CHECK_INTERVAL, 'number'));
+        dialog.appendChild(createSetting('isv-cooldown', 'Cooldown zwischen Aktionen (ms)', COOLDOWN, 'number'));
+        dialog.appendChild(createSetting('isv-research-mode', 'Research-Modus aktivieren', RESEARCH_MODE));
+        dialog.appendChild(createSetting('isv-force-research', 'Research-Modus bei jedem Seitenaufruf ausführen', FORCE_RESEARCH));
+        dialog.appendChild(createSetting('isv-preserve-logs', 'Logs über Seitennavigation hinweg bewahren', PRESERVE_LOGS));
+        
+        // Log-Verwaltungs-Button
+        const logManagementContainer = document.createElement('div');
+        logManagementContainer.style.cssText = 'margin-bottom: 15px; display: flex; justify-content: space-between;';
+        
+        const clearLogsButton = document.createElement('button');
+        clearLogsButton.textContent = 'Gespeicherte Logs löschen';
+        clearLogsButton.style.cssText = `
+            padding: 8px 15px;
+            border: none;
+            background: #ff5555;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        `;
+        clearLogsButton.onclick = () => {
+            clearStoredLogs();
+            // Benachrichtigung anzeigen
+            const notification = document.createElement('div');
+            notification.textContent = 'Alle gespeicherten Logs wurden gelöscht!';
+            notification.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                background: rgba(255, 0, 0, 0.8);
+                color: white;
+                padding: 10px 15px;
+                border-radius: 4px;
+                z-index: 999999;
+                font-family: Arial, sans-serif;
+                font-weight: bold;
+            `;
+            document.body.appendChild(notification);
+            
+            // Nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.5s';
+                setTimeout(() => notification.remove(), 500);
+            }, 3000);
+        };
+        
+        logManagementContainer.appendChild(clearLogsButton);
+        dialog.appendChild(logManagementContainer);
+        
+        // Buttons
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.style.cssText = 'display: flex; justify-content: flex-end; margin-top: 20px;';
+        
+        const cancelButton = document.createElement('button');
+        cancelButton.textContent = 'Abbrechen';
+        cancelButton.style.cssText = `
+            padding: 8px 15px;
+            margin-right: 10px;
+            border: none;
+            background: #ddd;
+            color: #333;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        `;
+        cancelButton.onclick = () => dialog.remove();
+        
+        const saveButton = document.createElement('button');
+        saveButton.textContent = 'Speichern';
+        saveButton.style.cssText = `
+            padding: 8px 15px;
+            border: none;
+            background: #5a32a3;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        `;
+        saveButton.onclick = () => {
+            // Einstellungen speichern
+            DEBUG = saveConfig('DEBUG', document.getElementById('isv-debug').checked);
+            CHECK_INTERVAL = saveConfig('CHECK_INTERVAL', parseInt(document.getElementById('isv-check-interval').value) || 250);
+            COOLDOWN = saveConfig('COOLDOWN', parseInt(document.getElementById('isv-cooldown').value) || 2000);
+            RESEARCH_MODE = saveConfig('RESEARCH_MODE', document.getElementById('isv-research-mode').checked);
+            FORCE_RESEARCH = saveConfig('FORCE_RESEARCH', document.getElementById('isv-force-research').checked);
+            PRESERVE_LOGS = saveConfig('PRESERVE_LOGS', document.getElementById('isv-preserve-logs').checked);
+            
+            // Dialog schließen
+            dialog.remove();
+            
+            // Benachrichtigung anzeigen
+            const notification = document.createElement('div');
+            notification.textContent = 'Einstellungen gespeichert!';
+            notification.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 20px;
+                background: rgba(90, 50, 163, 0.9);
+                color: white;
+                padding: 10px 15px;
+                border-radius: 4px;
+                z-index: 999999;
+                font-family: Arial, sans-serif;
+                font-weight: bold;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            `;
+            document.body.appendChild(notification);
+            
+            // Nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.5s';
+                setTimeout(() => notification.remove(), 500);
+            }, 3000);
+        };
+        
+        buttonsContainer.appendChild(cancelButton);
+        buttonsContainer.appendChild(saveButton);
+        dialog.appendChild(buttonsContainer);
+        
+        // Dialog zum DOM hinzufügen
+        document.body.appendChild(dialog);
+    };
+
+    // Status-Tracking
+    let buttonShown = false;
+    let lastActionTime = 0;
+    let currentUrl = location.href;
+    let mainTimer = null;
+    let lastStatusMessages = {};     // Für das Tracking wiederholter Nachrichten
+    let researchDone = false;        // Vermeidet wiederholte Research-Ausführungen
+    let researchButtonAdded = false; // Verfolgt, ob der Research-Button bereits hinzugefügt wurde
+
     // Hauptfunktion
     function init() {
         logStatus('Initialisiere');
+        
+        // Lade gespeicherte Logs
+        if (PRESERVE_LOGS) {
+            loadStoredLogs();
+        }
 
         // Wenn DOM noch nicht geladen, warten
         if (document.readyState === 'loading') {
