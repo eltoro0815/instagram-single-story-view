@@ -680,89 +680,123 @@
         return match ? match[1] : null;
     }
 
-    function extractStoryId() {
-        // Aus URL extrahieren
-        const match = window.location.pathname.match(/\/stories\/[^\/]+\/(\d+)/);
-        if (match && match[1]) {
-            log('Story-ID aus URL gefunden:', match[1]);
-            return match[1];
-        }
+    // Mini-Skript zur Diagnose von Story-IDs
+    console.log("[ISV-DEBUG] Diagnose-Skript gestartet");
+    console.log("[ISV-DEBUG] URL:", window.location.href);
 
-        // In DOM nach Medien-URLs suchen
-        log('Suche Story-ID in Medien-Elementen');
-        const mediaElements = document.querySelectorAll('img[srcset], video source, img[src], video');
+    // Diese Funktion analysiert die URL und sucht nach versteckten Story-IDs
+    function analyzeUrlForStoryIds(url) {
+        if (!url) return null;
 
-        for (const element of mediaElements) {
-            const src = element.src || element.srcset || '';
-            if (!src) continue;
+        // Vereinfachen der URL für die Analyse
+        const decodedUrl = decodeURIComponent(url);
+        console.log("[ISV-DEBUG] Analysiere URL:", decodedUrl);
 
-            log('Prüfe Medien-URL:', src);
-
-            // Verschiedene Muster für die Story-ID
-            const patterns = [
-                /\/stories\/[^\/]+\/(\d+)/, // Story URL Format
-                /stories%2F[^%]+%2F(\d+)/,  // Encoded Story URL
-                /instagram\.com\/stories\/[^\/]+\/(\d+)/, // Volle URL 
-                /instagram\.com%2Fstories%2F[^%]+%2F(\d+)/, // Encoded volle URL
-                /stories\/highlights\/(\d+)/, // Highlights URL
-                /reel\/(\d+)/, // Reels haben auch IDs, die manchmal für Stories verwendet werden
-                /\/(\d{15,25})(?:\?|\/|$)/ // Lange Zahlen-IDs, aber nur am Ende der URL oder vor ? oder /
-            ];
-
-            for (const pattern of patterns) {
-                const match = src.match(pattern);
-                if (match && match[1]) {
-                    // Prüfen, ob die ID plausibel ist (Instagram IDs sind meist 15-25 Ziffern lang)
-                    if (match[1].length >= 5 && match[1].length <= 25) {
-                        log('Story-ID in Medien-Element gefunden:', match[1]);
-                        return match[1];
-                    }
-                }
+        // Extrahiere Zahlen, die potenziell Story-IDs sein könnten
+        const matches = decodedUrl.match(/\d{10,25}/g) || [];
+        if (matches.length > 0) {
+            console.log("[ISV-DEBUG] Gefundene lange Zahlen in URL:", matches);
+            
+            // Filtere ungültige IDs heraus (beginnend mit 13)
+            const validIds = matches.filter(id => id.length >= 15 && !id.startsWith('13'));
+            const invalidIds = matches.filter(id => id.length >= 15 && id.startsWith('13'));
+            
+            if (invalidIds.length > 0) {
+                console.warn("[ISV-DEBUG] Ungültige IDs gefunden (beginnend mit 13):", invalidIds);
+            }
+            
+            if (validIds.length > 0) {
+                console.log("[ISV-DEBUG] Mögliche gültige Story-IDs:", validIds);
+                // Bevorzuge längere IDs (neueres Format von Instagram)
+                return validIds.sort((a, b) => b.length - a.length)[0];
             }
         }
+        
+        return null;
+    }
 
-        // Suche in Meta-Tags nach Story-ID
+    // Analysiere Media-Source-Attribute nach Story-IDs
+    function analyzeMediaSourcesForStoryIds() {
+        const mediaElements = document.querySelectorAll('img[src], img[srcset], video source, video');
+        const storyIds = new Map(); // Verwende Map für Eindeutigkeit und Häufigkeitszählung
+        
+        mediaElements.forEach(el => {
+            const src = el.getAttribute('src') || el.getAttribute('srcset') || '';
+            if (!src) return;
+            
+            // Suche nach Story-ID in der Medien-URL
+            const storyIdMatch = src.match(/\/stories\/[^\/]+\/(\d+)/);
+            if (storyIdMatch && storyIdMatch[1]) {
+                const id = storyIdMatch[1];
+                if (id.length >= 15 && !id.startsWith('13')) {
+                    // Zähle Häufigkeit des Vorkommens
+                    storyIds.set(id, (storyIds.get(id) || 0) + 1);
+                    console.log("[ISV-DEBUG] Story-ID in Medien-URL gefunden:", id, "Quelle:", src);
+                } else if (id.startsWith('13')) {
+                    console.warn("[ISV-DEBUG] Ungültige Story-ID in Medien-URL (beginnt mit 13):", id, "Quelle:", src);
+                }
+            } else {
+                // Alternative Methode: Suche nach langen Zahlen in der URL
+                const numberMatches = src.match(/(\d{15,25})/g) || [];
+                numberMatches.forEach(num => {
+                    if (!num.startsWith('13')) {
+                        console.log("[ISV-DEBUG] Mögliche Story-ID in Medien-URL:", num, "Quelle:", src);
+                        storyIds.set(num, (storyIds.get(num) || 0) + 1);
+                    }
+                });
+            }
+        });
+        
+        // Konvertiere zu Array und sortiere nach Häufigkeit (häufigere IDs priorisieren)
+        return Array.from(storyIds.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(entry => entry[0]);
+    }
+
+    // Diese Funktion modifiziert die extractStoryId Funktion, um sicherzustellen,
+    // dass sie nie eine ID zurückgibt, die mit '13' beginnt
+    function extractStoryId() {
+        // Analysiere die aktuelle URL für Story-IDs
+        const urlStoryId = analyzeUrlForStoryIds(window.location.href);
+        if (urlStoryId) {
+            console.log("[ISV-DEBUG] Story-ID aus URL extrahiert:", urlStoryId);
+            return urlStoryId;
+        }
+        
+        // Suche in Meta-Tags
         const metaTags = document.querySelectorAll('meta[property^="og:"], meta[name^="og:"]');
         for (const meta of metaTags) {
             const content = meta.getAttribute('content') || '';
             if (!content) continue;
             
-            log('Prüfe Meta-Tag:', content);
-            
-            // Suche nach Story-ID in meta tags
-            const patterns = [
-                /\/stories\/[^\/]+\/(\d+)/, 
-                /instagram\.com\/stories\/[^\/]+\/(\d+)/
-            ];
-            
-            for (const pattern of patterns) {
-                const match = content.match(pattern);
-                if (match && match[1]) {
-                    if (match[1].length >= 5 && match[1].length <= 25) {
-                        log('Story-ID in Meta-Tag gefunden:', match[1]);
-                        return match[1];
-                    }
-                }
+            const metaStoryId = analyzeUrlForStoryIds(content);
+            if (metaStoryId) {
+                console.log("[ISV-DEBUG] Story-ID aus Meta-Tag extrahiert:", metaStoryId);
+                return metaStoryId;
             }
         }
         
-        // In mobilem DOM nach Item-IDs suchen (Instagram verwendet oft data-* Attribute)
-        const possibleItemElements = document.querySelectorAll('[data-id], [data-item-id], [data-media-id], [id^="story-"]');
-        for (const element of possibleItemElements) {
-            const id = element.getAttribute('data-id') || element.getAttribute('data-item-id') || 
-                       element.getAttribute('data-media-id') || element.id;
+        // Analysiere Medien-Quellen
+        const mediaStoryIds = analyzeMediaSourcesForStoryIds();
+        if (mediaStoryIds.length > 0) {
+            console.log("[ISV-DEBUG] Story-ID aus Medien-Quellen extrahiert:", mediaStoryIds[0], 
+                       "(Gefunden in", mediaStoryIds.length, "Elementen)");
+            return mediaStoryIds[0];
+        }
+        
+        // In DOM nach data-* Attributen suchen
+        const elementsWithDataAttr = document.querySelectorAll('[data-id], [data-item-id], [data-media-id]');
+        for (const el of elementsWithDataAttr) {
+            const dataId = el.getAttribute('data-id') || el.getAttribute('data-item-id') || 
+                          el.getAttribute('data-media-id') || '';
             
-            if (!id) continue;
-            
-            // Numerische ID extrahieren
-            const numericId = id.match(/(\d{5,25})/);
-            if (numericId && numericId[1]) {
-                log('Story-ID in DOM-Element Attribut gefunden:', numericId[1]);
-                return numericId[1];
+            if (dataId && dataId.length >= 15 && !dataId.startsWith('13')) {
+                console.log("[ISV-DEBUG] Story-ID aus data-Attribut gefunden:", dataId);
+                return dataId;
             }
         }
-
-        log('Keine Story-ID gefunden');
+        
+        console.log("[ISV-DEBUG] Keine geeignete Story-ID gefunden");
         return null;
     }
 
