@@ -1,0 +1,50 @@
+name: Bump Version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'instagram-single-story.user.js'
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Set Git user
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+      
+      - name: Bump version
+        run: |
+          # Extrahiere aktuelle Version aus dem Userscript
+          CURRENT_VERSION=$(grep -oP '// @version\s+\K(\d+\.\d+\.\d+)' instagram-single-story.user.js)
+          echo "Aktuelle Version: $CURRENT_VERSION"
+          
+          # Erhöhe Patch-Version um 1
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          echo "Neue Version: $NEW_VERSION"
+          
+          # Ersetze Version im Userscript
+          sed -i "s/\/\/ @version      $CURRENT_VERSION/\/\/ @version      $NEW_VERSION/" instagram-single-story.user.js
+          
+          # Überprüfe, ob sich etwas geändert hat
+          if git diff --quiet; then
+            echo "Keine Versionsaktualisierung erforderlich"
+            exit 0
+          fi
+          
+          # Committe und pushe Änderungen
+          git add instagram-single-story.user.js
+          git commit -m "Bump version to $NEW_VERSION [skip ci]"
+          git push 
