@@ -662,45 +662,36 @@
             statusIndicator.textContent = 'Klicke auf Navigations-Button...';
             console.log("[ISV-DEBUG] Versuche Button zu klicken:", nextButton);
             
-            // Methode 1: Natürlicher Klick mit MouseEvents
-            const rect = nextButton.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
+            // Versuche mehrere Methoden nacheinander
             
-            // Erzeugt natürlichere Klick-Sequenz mit mousedown, mouseup, click
-            const clickEvents = [
-                new MouseEvent('mousedown', {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window,
-                    clientX: centerX,
-                    clientY: centerY
-                }),
-                new MouseEvent('mouseup', {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window,
-                    clientX: centerX,
-                    clientY: centerY
-                }),
-                new MouseEvent('click', {
-                    bubbles: true,
-                    cancelable: true,
-                    view: window,
-                    clientX: centerX,
-                    clientY: centerY
-                })
-            ];
+            // Methode 1: Einfacher direkter Klick
+            nextButton.click();
             
-            // Sequenzielle Ausführung der Events
-            for (const event of clickEvents) {
-                nextButton.dispatchEvent(event);
-            }
-            
-            // Methode 2: Alternative Klick-Methode
+            // Methode 2: Natürlicher Klick mit MouseEvents (alternative Implementierung)
             setTimeout(() => {
-                if (document.getElementById('isv-navigation-status')) {
-                    statusIndicator.textContent = 'Versuche alternative Klick-Methode...';
+                try {
+                    if (document.getElementById('isv-navigation-status')) {
+                        statusIndicator.textContent = 'Versuche alternative Klick-Methode...';
+                        
+                        // Methode ohne MouseEvent (häufig zuverlässiger in Tampermonkey)
+                        const rect = nextButton.getBoundingClientRect();
+                        const centerX = rect.left + rect.width / 2;
+                        const centerY = rect.top + rect.height / 2;
+                        
+                        // Element unter der Mausposition finden und klicken
+                        const elementAtPoint = document.elementFromPoint(centerX, centerY);
+                        if (elementAtPoint) {
+                            console.log("[ISV-DEBUG] Element an Position gefunden:", elementAtPoint);
+                            elementAtPoint.click();
+                        } else {
+                            console.log("[ISV-DEBUG] Kein Element an der Position gefunden");
+                            // Trotzdem versuchen, den Button zu klicken
+                            nextButton.click();
+                        }
+                    }
+                } catch (err) {
+                    console.error("[ISV-DEBUG] Fehler bei alternativer Klick-Methode:", err);
+                    // Fallback zur einfachen Methode
                     nextButton.click();
                 }
             }, 500);
@@ -719,11 +710,23 @@
                         keyCode: 13
                     }));
                     
+                    // Space-Taste simulieren
+                    setTimeout(() => {
+                        nextButton.dispatchEvent(new KeyboardEvent('keydown', {
+                            bubbles: true,
+                            cancelable: true,
+                            key: ' ',
+                            keyCode: 32
+                        }));
+                    }, 100);
+                    
                     // Als letzte Möglichkeit - direkt navigieren, wenn es ein Link ist
                     if (nextButton.tagName === 'A' && nextButton.href) {
                         statusIndicator.textContent = 'Navigiere über Link direkt...';
                         console.log("[ISV-DEBUG] Direkte Navigation über Link:", nextButton.href);
-                        window.location.href = nextButton.href;
+                        setTimeout(() => {
+                            window.location.href = nextButton.href;
+                        }, 200);
                     }
                 }
             }, 1000);
@@ -731,6 +734,13 @@
         } catch (e) {
             console.error("[ISV-DEBUG] Fehler beim Klicken des Buttons:", e);
             statusIndicator.textContent = 'Fehler beim Klicken: ' + e.message;
+            
+            // Versuch einer einfachen Klick-Methode als letzten Ausweg
+            try {
+                nextButton.click();
+            } catch (finalError) {
+                console.error("[ISV-DEBUG] Auch einfacher Klick fehlgeschlagen:", finalError);
+            }
         }
     }
 
