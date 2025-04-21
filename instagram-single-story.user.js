@@ -19,6 +19,24 @@
 (function () {
     'use strict';
 
+    // Direkt als erstes den Menüeintrag registrieren
+    let menuCommandId = null;
+    try {
+        // Versuchen, das Menükommando zu registrieren - mit 'e' als Access Key
+        menuCommandId = GM_registerMenuCommand('Instagram Single Story View - Einstellungen', function() {
+            console.log('[ISV] Einstellungen-Dialog wird über Menü geöffnet');
+            if (typeof createSettingsUI === 'function') {
+                createSettingsUI();
+            } else {
+                console.error('[ISV] createSettingsUI ist noch nicht definiert');
+                alert('Die Einstellungen können noch nicht geöffnet werden. Bitte warte, bis die Seite vollständig geladen ist.');
+            }
+        }, 'e');
+        console.log('[ISV] Tampermonkey-Menüeintrag erfolgreich registriert mit ID:', menuCommandId);
+    } catch (error) {
+        console.error('[ISV] Fehler beim Registrieren des Tampermonkey-Menüeintrags:', error);
+    }
+
     // Konfiguration aus GM_getValue mit Standardwerten
     const getConfig = (key, defaultValue) => {
         return GM_getValue(key, defaultValue);
@@ -36,17 +54,6 @@
     let COOLDOWN = getConfig('COOLDOWN', 2000);          // Cooldown zwischen Aktionen in ms
     let RESEARCH_MODE = getConfig('RESEARCH_MODE', true); // Aktiviert den Research-Modus
     let FORCE_RESEARCH = getConfig('FORCE_RESEARCH', true); // Erzwingt die Durchführung des Research-Modus
-
-    // Tampermonkey-Menüeintrag registrieren
-    try {
-        GM_registerMenuCommand('Instagram Single Story View - Einstellungen', function() {
-            console.log('[ISV] Einstellungen-Dialog wird über Menü geöffnet');
-            createSettingsUI();
-        });
-        console.log('[ISV] Tampermonkey-Menüeintrag erfolgreich registriert');
-    } catch (error) {
-        console.error('[ISV] Fehler beim Registrieren des Tampermonkey-Menüeintrags:', error);
-    }
 
     // Wichtige Statusänderungen immer loggen
     const logStatus = (...args) => {
@@ -386,6 +393,51 @@
                 logStatus('Research-Button hinzugefügt und sichtbar gemacht');
             }
         }, 500);
+
+        // Füge zusätzlich einen Einstellungsbutton hinzu
+        addSettingsButton();
+    }
+
+    // Button zum Öffnen der Einstellungen
+    function addSettingsButton() {
+        if (document.getElementById('isv-settings-button')) {
+            return;
+        }
+        
+        const button = document.createElement('button');
+        button.id = 'isv-settings-button';
+        button.textContent = 'ISV Einstellungen';
+        button.style.cssText = `
+            position: fixed;
+            top: 10px;
+            left: 200px;
+            z-index: 9999999;
+            background: rgba(90, 50, 163, 0.9);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-family: Arial, sans-serif;
+            transition: opacity 0.3s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        `;
+        
+        button.addEventListener('click', function() {
+            createSettingsUI();
+        });
+        
+        // Füge den Button direkt zum body hinzu
+        document.body.appendChild(button);
+        
+        // Stelle sicher, dass der Button sichtbar ist
+        setTimeout(() => {
+            if (document.getElementById('isv-settings-button')) {
+                document.getElementById('isv-settings-button').style.display = 'block';
+                logStatus('Einstellungs-Button hinzugefügt und sichtbar gemacht');
+            }
+        }, 500);
     }
 
     // Funktion, die den Research-Button zur Seite hinzufügt
@@ -393,6 +445,10 @@
         if (RESEARCH_MODE && !researchButtonAdded && document.body) {
             addResearchButton();
             logStatus('Research-Button zur Seite hinzugefügt');
+        } else if (!document.getElementById('isv-settings-button') && document.body) {
+            // Stelle sicher, dass der Einstellungsbutton auch existiert, selbst wenn Research deaktiviert ist
+            addSettingsButton();
+            logStatus('Einstellungs-Button hinzugefügt');
         }
     }
 
