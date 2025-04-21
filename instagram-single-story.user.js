@@ -357,7 +357,7 @@
         }, 500);
     }
 
-    // Funktion zum Finden der Story-ID durch Navigation
+    // Verbesserte Funktion zum Finden der Story-ID durch Navigation
     function findStoryIdByNavigation() {
         console.log("[ISV-DEBUG] Starte Navigation zur Story-ID-Ermittlung");
         
@@ -381,59 +381,209 @@
             font-family: Arial, sans-serif;
             max-width: 300px;
         `;
-        statusIndicator.textContent = 'Navigiere zu nächster Story...';
+        statusIndicator.textContent = 'Starte Story-Navigation...';
         document.body.appendChild(statusIndicator);
         
-        // Finde den "Weiter"/"Next" Button für die nächste Story
-        const nextButton = findNavigationButton('next');
+        // Debug-Informationen über den aktuellen Zustand
+        console.log("[ISV-DEBUG] Original-URL:", originalUrl);
+        console.log("[ISV-DEBUG] Original-Titel:", originalTitle);
         
+        // Finde den "Weiter"/"Next" Button für die nächste Story
+        statusIndicator.textContent = 'Suche nach Navigations-Button...';
+        
+        // Verbesserte Button-Suche mit mehreren Strategien
+        let nextButton = null;
+        
+        // Strategie 1: Suche nach Button mit aria-label
+        const ariaLabels = ['Weiter', 'Next', 'next', 'Nächste', 'weiter', 'Vor', 'vor'];
+        
+        for (const label of ariaLabels) {
+            const button = document.querySelector(`button[aria-label="${label}"], [aria-label="${label}"]`);
+            if (button) {
+                console.log(`[ISV-DEBUG] Button gefunden mit aria-label="${label}"`, button);
+                nextButton = button;
+                break;
+            }
+        }
+        
+        // Strategie 2: Visuell positionierte Elemente
         if (!nextButton) {
-            statusIndicator.textContent = 'Fehler: Kann "Weiter"-Button nicht finden!';
+            console.log("[ISV-DEBUG] Keine Button mit passenden aria-labels gefunden, suche nach positionierten Elementen");
+            
+            // Alle klickbaren Elemente
+            const clickableElements = document.querySelectorAll('button, [role="button"], [tabindex="0"], a, div');
+            console.log(`[ISV-DEBUG] ${clickableElements.length} klickbare Elemente gefunden`);
+            
+            // Konvertiere NodeList zu Array und filtere nach Position
+            const candidateButtons = Array.from(clickableElements).filter(el => {
+                const rect = el.getBoundingClientRect();
+                
+                // Ignoriere unsichtbare oder zu kleine Elemente
+                if (rect.width < 20 || rect.height < 20) return false;
+                
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                
+                // Ist das Element auf der rechten Seite des Bildschirms?
+                const isRightSide = rect.right > viewportWidth * 0.7;
+                // Ist das Element in der Mitte der Bildschirmhöhe?
+                const isCenteredVertically = rect.top > viewportHeight * 0.3 && rect.bottom < viewportHeight * 0.7;
+                // Ist es ein großes Element für Navigation?
+                const isTallEnough = rect.height > viewportHeight * 0.2;
+                
+                // Entweder ein zentrales Navigationselement oder ein seitliches großes Element
+                return (isRightSide && isTallEnough) || 
+                       (isRightSide && isCenteredVertically);
+            });
+            
+            console.log(`[ISV-DEBUG] ${candidateButtons.length} mögliche Navigations-Buttons nach Position`);
+            
+            // Sortiere nach Größe - größere Elemente sind wahrscheinlicher Navigations-Buttons
+            candidateButtons.sort((a, b) => {
+                const rectA = a.getBoundingClientRect();
+                const rectB = b.getBoundingClientRect();
+                return (rectB.width * rectB.height) - (rectA.width * rectA.height);
+            });
+            
+            // Logge alle Kandidaten für Debug-Zwecke
+            candidateButtons.forEach((btn, index) => {
+                const rect = btn.getBoundingClientRect();
+                console.log(`[ISV-DEBUG] Button-Kandidat #${index+1}:`, {
+                    element: btn.tagName,
+                    classes: btn.className,
+                    id: btn.id,
+                    text: btn.textContent ? btn.textContent.substring(0, 20) : '',
+                    rect: {
+                        width: rect.width,
+                        height: rect.height,
+                        top: rect.top,
+                        right: rect.right,
+                        bottom: rect.bottom,
+                        left: rect.left
+                    }
+                });
+            });
+            
+            // Nehme den ersten Kandidaten
+            if (candidateButtons.length > 0) {
+                nextButton = candidateButtons[0];
+            }
+        }
+        
+        // Strategie 3: Suche nach rechts positionierten großen SVG-Elementen
+        if (!nextButton) {
+            console.log("[ISV-DEBUG] Suche nach SVG-Elementen");
+            const svgElements = document.querySelectorAll('svg');
+            
+            // Filtere nach Position
+            const candidateSvgs = Array.from(svgElements).filter(svg => {
+                const rect = svg.getBoundingClientRect();
+                
+                // Ignoriere unsichtbare oder zu kleine Elemente
+                if (rect.width < 20 || rect.height < 20) return false;
+                
+                const viewportWidth = window.innerWidth;
+                
+                // Ist das Element auf der rechten Seite des Bildschirms?
+                const isRightSide = rect.right > viewportWidth * 0.75;
+                
+                return isRightSide;
+            });
+            
+            console.log(`[ISV-DEBUG] ${candidateSvgs.length} mögliche SVG-Navigation`);
+            
+            if (candidateSvgs.length > 0) {
+                // Versuche, den Parent-Button des SVGs zu finden
+                const svgParent = candidateSvgs[0].closest('button, [role="button"], a, div[tabindex]');
+                if (svgParent) {
+                    nextButton = svgParent;
+                    console.log("[ISV-DEBUG] Parent des SVG als Button gewählt:", svgParent);
+                } else {
+                    // Verwende das SVG direkt
+                    nextButton = candidateSvgs[0];
+                    console.log("[ISV-DEBUG] SVG direkt als Button gewählt:", candidateSvgs[0]);
+                }
+            }
+        }
+        
+        // Kein Button gefunden
+        if (!nextButton) {
+            statusIndicator.textContent = 'Fehler: Kann keinen "Weiter"-Button finden!';
             statusIndicator.style.background = 'rgba(255, 0, 0, 0.8)';
             console.error("[ISV-DEBUG] Kann keinen 'Weiter'-Button finden");
             
-            // Nach 3 Sekunden ausblenden
+            // Füge Debugging-Informationen hinzu
+            statusIndicator.innerHTML += '<br>Bitte versuche es erneut oder klicke selbst auf "Weiter".';
+            
+            // Nach 5 Sekunden ausblenden
             setTimeout(() => {
                 if (document.getElementById('isv-navigation-status')) {
                     document.getElementById('isv-navigation-status').remove();
                 }
-            }, 3000);
+            }, 5000);
             return;
         }
         
-        // Klicke auf "Weiter" und warte auf URL-Änderung
-        console.log("[ISV-DEBUG] Klicke auf 'Weiter'-Button:", nextButton);
+        // Info über gefundenen Button
+        if (nextButton) {
+            console.log("[ISV-DEBUG] Gefundener Button:", {
+                tagName: nextButton.tagName,
+                className: nextButton.className,
+                id: nextButton.id,
+                ariaLabel: nextButton.getAttribute('aria-label'),
+                text: nextButton.textContent ? nextButton.textContent.substring(0, 50) : '',
+                rect: nextButton.getBoundingClientRect()
+            });
+        }
+        
+        // Jetzt haben wir den Button, wir bereiten die Navigation vor
+        statusIndicator.textContent = 'Navigations-Button gefunden, bereite Navigation vor...';
+        
+        // Speichere Original-URL-Informationen
+        const originalUrlObj = new URL(originalUrl);
+        const originalPathname = originalUrlObj.pathname;
+        console.log("[ISV-DEBUG] Original-Pathname:", originalPathname);
         
         // Setze einen Timeout, falls die Navigation fehlschlägt
         let navigationTimeout = setTimeout(() => {
             if (document.getElementById('isv-navigation-status')) {
                 statusIndicator.textContent = 'Fehler: Navigation zur nächsten Story fehlgeschlagen!';
                 statusIndicator.style.background = 'rgba(255, 0, 0, 0.8)';
+                console.error("[ISV-DEBUG] Navigation-Timeout nach 10 Sekunden");
                 
-                // Nach 3 Sekunden ausblenden
+                // Nach 5 Sekunden ausblenden
                 setTimeout(() => {
                     if (document.getElementById('isv-navigation-status')) {
                         document.getElementById('isv-navigation-status').remove();
                     }
-                }, 3000);
+                }, 5000);
             }
-        }, 5000);
+        }, 10000); // Längerer Timeout (10 Sekunden)
         
-        // URL-Überwachung für Änderungen
-        const originalUrlObj = new URL(originalUrl);
-        const originalPathname = originalUrlObj.pathname;
-        
-        // Monitor für URL-Änderungen
+        // Überwache URL-Änderungen
+        let urlCheckCount = 0;
         const urlCheckInterval = setInterval(() => {
+            urlCheckCount++;
             const currentUrl = window.location.href;
             const currentUrlObj = new URL(currentUrl);
             
+            // Debugge die aktuelle URL alle 10 Checks
+            if (urlCheckCount % 10 === 0) {
+                console.log("[ISV-DEBUG] Aktueller URL-Check:", {
+                    count: urlCheckCount,
+                    currentUrl: currentUrl,
+                    originalPathname: originalPathname,
+                    currentPathname: currentUrlObj.pathname,
+                    changed: currentUrlObj.pathname !== originalPathname
+                });
+            }
+            
             // Prüfe, ob sich die URL geändert hat
             if (currentUrlObj.pathname !== originalPathname) {
+                console.log("[ISV-DEBUG] URL hat sich geändert:", currentUrl);
                 clearInterval(urlCheckInterval);
                 clearTimeout(navigationTimeout);
                 
-                console.log("[ISV-DEBUG] URL hat sich geändert:", currentUrl);
                 statusIndicator.textContent = 'Story gewechselt! Analysiere neue URL...';
                 
                 // Analysiere die neue URL
@@ -448,30 +598,50 @@
                     // Warte einen Moment, um die neue Story anzuzeigen
                     setTimeout(() => {
                         // Zurück zur ursprünglichen Story navigieren
+                        statusIndicator.textContent = `Story-ID gefunden: ${storyId}. Navigiere zurück...`;
                         window.history.go(-1);
                         
                         // Warte, bis wir zurück sind
-                        setTimeout(() => {
-                            if (document.getElementById('isv-navigation-status')) {
-                                statusIndicator.textContent = `Erfolgreich! Story-ID: ${storyId}`;
-                                
-                                // Kopiere ID in die Zwischenablage
-                                try {
-                                    navigator.clipboard.writeText(storyId).then(() => {
-                                        statusIndicator.textContent = `Erfolgreich! Story-ID: ${storyId} (in Zwischenablage kopiert)`;
-                                    });
-                                } catch (e) {
-                                    console.error("[ISV-DEBUG] Fehler beim Kopieren in die Zwischenablage:", e);
-                                }
-                                
-                                // Nach 5 Sekunden ausblenden
-                                setTimeout(() => {
-                                    if (document.getElementById('isv-navigation-status')) {
-                                        document.getElementById('isv-navigation-status').remove();
-                                    }
-                                }, 5000);
+                        let backCheckCount = 0;
+                        const backCheckInterval = setInterval(() => {
+                            backCheckCount++;
+                            const backUrl = window.location.href;
+                            
+                            // Log alle 10 Checks
+                            if (backCheckCount % 10 === 0) {
+                                console.log("[ISV-DEBUG] Zurück-Navigation Check:", {
+                                    count: backCheckCount,
+                                    currentUrl: backUrl,
+                                    originalUrl: originalUrl,
+                                    matches: backUrl === originalUrl
+                                });
                             }
-                        }, 1000);
+                            
+                            // Prüfe, ob wir zurück sind
+                            if (backUrl === originalUrl || backCheckCount > 100) {
+                                clearInterval(backCheckInterval);
+                                
+                                if (document.getElementById('isv-navigation-status')) {
+                                    statusIndicator.textContent = `Erfolgreich! Story-ID: ${storyId}`;
+                                    
+                                    // Kopiere ID in die Zwischenablage
+                                    try {
+                                        navigator.clipboard.writeText(storyId).then(() => {
+                                            statusIndicator.textContent = `Erfolgreich! Story-ID: ${storyId} (in Zwischenablage kopiert)`;
+                                        });
+                                    } catch (e) {
+                                        console.error("[ISV-DEBUG] Fehler beim Kopieren in die Zwischenablage:", e);
+                                    }
+                                    
+                                    // Nach 5 Sekunden ausblenden
+                                    setTimeout(() => {
+                                        if (document.getElementById('isv-navigation-status')) {
+                                            document.getElementById('isv-navigation-status').remove();
+                                        }
+                                    }, 5000);
+                                }
+                            }
+                        }, 100);
                     }, 1000);
                 } else {
                     statusIndicator.textContent = 'Fehler: Keine Story-ID in der neuen URL gefunden!';
@@ -487,8 +657,81 @@
             }
         }, 100);
         
-        // Führe den Klick aus
-        nextButton.click();
+        // Klick simulieren mit verschiedenen Methoden
+        try {
+            statusIndicator.textContent = 'Klicke auf Navigations-Button...';
+            console.log("[ISV-DEBUG] Versuche Button zu klicken:", nextButton);
+            
+            // Methode 1: Natürlicher Klick mit MouseEvents
+            const rect = nextButton.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            // Erzeugt natürlichere Klick-Sequenz mit mousedown, mouseup, click
+            const clickEvents = [
+                new MouseEvent('mousedown', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: centerX,
+                    clientY: centerY
+                }),
+                new MouseEvent('mouseup', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: centerX,
+                    clientY: centerY
+                }),
+                new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    clientX: centerX,
+                    clientY: centerY
+                })
+            ];
+            
+            // Sequenzielle Ausführung der Events
+            for (const event of clickEvents) {
+                nextButton.dispatchEvent(event);
+            }
+            
+            // Methode 2: Alternative Klick-Methode
+            setTimeout(() => {
+                if (document.getElementById('isv-navigation-status')) {
+                    statusIndicator.textContent = 'Versuche alternative Klick-Methode...';
+                    nextButton.click();
+                }
+            }, 500);
+            
+            // Methode 3: Focus und Enter/Space
+            setTimeout(() => {
+                if (document.getElementById('isv-navigation-status')) {
+                    statusIndicator.textContent = 'Versuche weitere Klick-Methode...';
+                    
+                    // Fokussieren und Enter-Taste simulieren
+                    nextButton.focus();
+                    nextButton.dispatchEvent(new KeyboardEvent('keydown', {
+                        bubbles: true,
+                        cancelable: true,
+                        key: 'Enter',
+                        keyCode: 13
+                    }));
+                    
+                    // Als letzte Möglichkeit - direkt navigieren, wenn es ein Link ist
+                    if (nextButton.tagName === 'A' && nextButton.href) {
+                        statusIndicator.textContent = 'Navigiere über Link direkt...';
+                        console.log("[ISV-DEBUG] Direkte Navigation über Link:", nextButton.href);
+                        window.location.href = nextButton.href;
+                    }
+                }
+            }, 1000);
+            
+        } catch (e) {
+            console.error("[ISV-DEBUG] Fehler beim Klicken des Buttons:", e);
+            statusIndicator.textContent = 'Fehler beim Klicken: ' + e.message;
+        }
     }
 
     // Hilfsfunktion zum Finden des Navigationsbuttons
@@ -580,62 +823,268 @@
         return null;
     }
 
-    // Funktion, die den Research-Button zur Seite hinzufügt
-    function ensureResearchButtonExists() {
-        if (RESEARCH_MODE && !researchButtonAdded && document.body) {
-            addResearchButton();
-            logStatus('Research-Button zur Seite hinzugefügt');
+    // Neue Funktion: Finde Story-ID durch Analyse der aktuellen URL und DOM-Strukturen
+    function findStoryIdByUrlPatterns() {
+        console.log("[ISV-DEBUG] Starte URL-basierte Story-ID-Ermittlung");
+        
+        // Status anzeigen
+        const statusIndicator = document.createElement('div');
+        statusIndicator.id = 'isv-navigation-status';
+        statusIndicator.style.cssText = `
+            position: fixed;
+            top: 130px;
+            left: 10px;
+            z-index: 9999999;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            font-family: Arial, sans-serif;
+            max-width: 300px;
+        `;
+        statusIndicator.textContent = 'Analysiere URL-Struktur...';
+        document.body.appendChild(statusIndicator);
+        
+        // Aktuelle URL analysieren
+        const currentUrl = window.location.href;
+        console.log("[ISV-DEBUG] Aktuelle URL:", currentUrl);
+        
+        // Versuche 1: Extrahiere Nutzer aus der URL
+        let username = null;
+        const usernameMatch = currentUrl.match(/\/stories\/([^\/]+)/);
+        if (usernameMatch && usernameMatch[1]) {
+            username = usernameMatch[1];
+            console.log("[ISV-DEBUG] Gefundener Nutzername:", username);
+            statusIndicator.textContent = `Nutzername gefunden: ${username}`;
+        } else {
+            statusIndicator.textContent = 'Fehler: Kein Nutzername in der URL gefunden.';
+            statusIndicator.style.background = 'rgba(255, 0, 0, 0.8)';
             
-            // Füge auch den spezifischen ID-Suchbutton hinzu
-            addSpecificIdSearchButton();
-            logStatus('Spezifischer ID-Suchbutton zur Seite hinzugefügt');
-            
-            // Füge den Navigations-ID-Finder-Button hinzu
-            addNavigationIDFinderButton();
-            logStatus('Navigations-ID-Finder-Button zur Seite hinzugefügt');
-        } else if (!document.getElementById('isv-settings-button') && document.body) {
-            // Stelle sicher, dass der Einstellungsbutton auch existiert, selbst wenn Research deaktiviert ist
-            addSettingsButton();
-            logStatus('Einstellungs-Button hinzugefügt');
-            
-            // Füge auch den spezifischen ID-Suchbutton hinzu, unabhängig vom Research-Modus
-            if (!document.getElementById('isv-specific-id-search-button')) {
-                addSpecificIdSearchButton();
-                logStatus('Spezifischer ID-Suchbutton zur Seite hinzugefügt');
-            }
-            
-            // Füge auch den Navigations-ID-Finder-Button hinzu
-            if (!document.getElementById('isv-navigation-id-button')) {
-                addNavigationIDFinderButton();
-                logStatus('Navigations-ID-Finder-Button zur Seite hinzugefügt');
-            }
+            // Nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                if (document.getElementById('isv-navigation-status')) {
+                    document.getElementById('isv-navigation-status').remove();
+                }
+            }, 3000);
+            return;
         }
-    }
-
-    // Füge den Button so früh wie möglich hinzu
-    document.addEventListener('DOMContentLoaded', ensureResearchButtonExists);
-    
-    // Falls DOMContentLoaded bereits abgefeuert wurde, direkt hinzufügen
-    if (document.readyState !== 'loading') {
-        ensureResearchButtonExists();
-    }
-    
-    // Periodische Prüfung, ob der Button noch existiert
-    setInterval(ensureResearchButtonExists, 2000);
-
-    // Hilfsfunktion zum Sammeln von Klassennamen
-    function collectClasses(elements) {
-        const classMap = {};
-        elements.forEach(el => {
-            if (el.className && typeof el.className === 'string') {
-                el.className.split(' ').forEach(cls => {
-                    if (cls && cls.trim()) {
-                        classMap[cls.trim()] = (classMap[cls.trim()] || 0) + 1;
-                    }
+        
+        // Versuche 2: Suche nach Medien-IDs im DOM
+        const mediaIds = collectMediaIdsFromDOM();
+        console.log("[ISV-DEBUG] Gefundene Medien-IDs:", mediaIds);
+        
+        if (mediaIds.length === 0) {
+            statusIndicator.textContent = 'Keine Medien-IDs im DOM gefunden. Versuche andere Methode...';
+        } else {
+            statusIndicator.textContent = `${mediaIds.length} Medien-IDs gefunden. Analysiere...`;
+        }
+        
+        // Versuche 3: Finde die aktuelle Story-ID aus der URL
+        let currentStoryId = null;
+        const storyIdMatch = currentUrl.match(/\/stories\/[^\/]+\/(\d+)/);
+        if (storyIdMatch && storyIdMatch[1]) {
+            currentStoryId = storyIdMatch[1];
+            console.log("[ISV-DEBUG] Aktuelle Story-ID aus URL:", currentStoryId);
+        }
+        
+        // Jetzt alle bekannten Informationen zusammenführen
+        let allCandidateIds = [];
+        
+        // Füge die aktuelle ID hinzu, wenn verfügbar
+        if (currentStoryId) {
+            allCandidateIds.push({
+                id: currentStoryId,
+                source: 'Aktuelle URL',
+                weight: 10 // Höchste Priorität für aktuelle URL
+            });
+        }
+        
+        // Füge alle aus dem DOM gefundenen IDs hinzu
+        allCandidateIds = allCandidateIds.concat(mediaIds.map(idObj => ({
+            id: idObj.id,
+            source: idObj.source,
+            weight: idObj.weight || 5 // Standard-Gewichtung
+        })));
+        
+        // Suche nach Story-IDs in Meta-Tags
+        const metaTags = document.querySelectorAll('meta[property="og:url"], meta[name="og:url"]');
+        metaTags.forEach(meta => {
+            const content = meta.getAttribute('content') || '';
+            if (!content) return;
+            
+            const metaStoryIdMatch = content.match(/\/stories\/[^\/]+\/(\d+)/);
+            if (metaStoryIdMatch && metaStoryIdMatch[1]) {
+                allCandidateIds.push({
+                    id: metaStoryIdMatch[1],
+                    source: 'Meta-Tag og:url',
+                    weight: 8 // Hohe Priorität für Meta-Tags
                 });
             }
         });
-        return classMap;
+        
+        // Sortiere nach Gewichtung
+        allCandidateIds.sort((a, b) => b.weight - a.weight);
+        
+        // Jetzt haben wir eine sortierte Liste potenzieller Story-IDs
+        console.log("[ISV-DEBUG] Alle Kandidaten-IDs:", allCandidateIds);
+        
+        if (allCandidateIds.length === 0) {
+            statusIndicator.textContent = 'Keine Story-IDs gefunden.';
+            statusIndicator.style.background = 'rgba(255, 0, 0, 0.8)';
+            
+            // Nach 3 Sekunden ausblenden
+            setTimeout(() => {
+                if (document.getElementById('isv-navigation-status')) {
+                    document.getElementById('isv-navigation-status').remove();
+                }
+            }, 3000);
+            return;
+        }
+        
+        // Verwende die ID mit der höchsten Gewichtung
+        const bestId = allCandidateIds[0].id;
+        const source = allCandidateIds[0].source;
+        
+        // Generiere die (vermutlich) korrekte einzelne Story-URL basierend auf Nutzername und ID
+        const singleStoryUrl = `https://www.instagram.com/stories/${username}/${bestId}/`;
+        console.log("[ISV-DEBUG] Generierte Einzelstory-URL:", singleStoryUrl);
+        
+        statusIndicator.textContent = `Beste ID gefunden: ${bestId} (Quelle: ${source})`;
+        statusIndicator.style.background = 'rgba(0, 128, 0, 0.8)';
+        
+        // Kopiere die ID in die Zwischenablage
+        try {
+            navigator.clipboard.writeText(bestId).then(() => {
+                statusIndicator.textContent = `ID: ${bestId} (kopiert) - URL: ${singleStoryUrl}`;
+            });
+        } catch (e) {
+            console.error("[ISV-DEBUG] Fehler beim Kopieren in die Zwischenablage:", e);
+        }
+        
+        // Angebot zur Navigation zur Einzelansicht
+        const navigateLink = document.createElement('a');
+        navigateLink.href = 'javascript:void(0);';
+        navigateLink.style.cssText = `
+            display: block;
+            margin-top: 10px;
+            color: #ffffff;
+            text-decoration: underline;
+        `;
+        navigateLink.textContent = 'Zur Einzelansicht dieser Story navigieren';
+        navigateLink.addEventListener('click', () => {
+            window.location.href = singleStoryUrl;
+        });
+        
+        statusIndicator.appendChild(document.createElement('br'));
+        statusIndicator.appendChild(navigateLink);
+        
+        // Nach 15 Sekunden ausblenden
+        setTimeout(() => {
+            if (document.getElementById('isv-navigation-status')) {
+                document.getElementById('isv-navigation-status').remove();
+            }
+        }, 15000);
+    }
+
+    // Sammelt Media-IDs aus dem DOM
+    function collectMediaIdsFromDOM() {
+        const results = [];
+        
+        // 1. Suche nach Media-IDs in Bild- und Video-Elementen
+        document.querySelectorAll('img, video, source').forEach(media => {
+            const src = media.getAttribute('src') || media.getAttribute('srcset') || '';
+            if (!src) return;
+            
+            // Instagram-Medien-URLs enthalten oft IDs im Format /dasfdsfds_n.jpg?_nc_sid=124578&_nc_rid=1234567890
+            const mediaIdMatch = src.match(/\/(\d{15,25})_n\./);
+            if (mediaIdMatch && mediaIdMatch[1]) {
+                results.push({
+                    id: mediaIdMatch[1],
+                    source: `Medien-Element ${media.tagName}`,
+                    weight: 7
+                });
+            }
+        });
+        
+        // 2. Suche nach IDs in data-Attributen
+        document.querySelectorAll('[data-id], [data-media-id], [data-story-id]').forEach(el => {
+            ['data-id', 'data-media-id', 'data-story-id'].forEach(attr => {
+                const value = el.getAttribute(attr);
+                if (value && /^\d{15,25}$/.test(value)) {
+                    results.push({
+                        id: value,
+                        source: `Element mit ${attr}`,
+                        weight: 6
+                    });
+                }
+            });
+        });
+        
+        // 3. Suche nach IDs in script-Tags
+        document.querySelectorAll('script:not([src])').forEach(script => {
+            const content = script.textContent || '';
+            
+            // Suche nach Media-IDs im Format "media_id":"12345678901234567"
+            const mediaIdMatches = content.match(/"(?:media_id|id)"\s*:\s*"(\d{15,25})"/g) || [];
+            for (const match of mediaIdMatches) {
+                const idMatch = match.match(/"(?:media_id|id)"\s*:\s*"(\d{15,25})"/);
+                if (idMatch && idMatch[1]) {
+                    results.push({
+                        id: idMatch[1],
+                        source: `Script-Tag JSON`,
+                        weight: 5
+                    });
+                }
+            }
+        });
+        
+        // 4. Suche in href-Attributen
+        document.querySelectorAll('a[href*="/stories/"]').forEach(link => {
+            const href = link.getAttribute('href');
+            if (!href) return;
+            
+            const storyIdMatch = href.match(/\/stories\/[^\/]+\/(\d+)/);
+            if (storyIdMatch && storyIdMatch[1]) {
+                results.push({
+                    id: storyIdMatch[1],
+                    source: `Link href`,
+                    weight: 9 // Sehr hohe Priorität für direkte Story-Links
+                });
+            }
+        });
+        
+        // 5. Suche in window.__additionalDataLoaded
+        if (typeof unsafeWindow !== 'undefined' && unsafeWindow.__additionalDataLoaded) {
+            try {
+                const dataStr = JSON.stringify(unsafeWindow.__additionalDataLoaded);
+                const idMatches = dataStr.match(/"id"\s*:\s*"(\d{15,25})"/g) || [];
+                
+                for (const match of idMatches) {
+                    const idMatch = match.match(/"id"\s*:\s*"(\d{15,25})"/);
+                    if (idMatch && idMatch[1]) {
+                        results.push({
+                            id: idMatch[1],
+                            source: `window.__additionalDataLoaded`,
+                            weight: 8
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error("[ISV-DEBUG] Fehler beim Parsen von __additionalDataLoaded:", e);
+            }
+        }
+        
+        // Entferne Duplikate und behalte die höchste Gewichtung
+        const uniqueIds = new Map();
+        for (const item of results) {
+            const existingItem = uniqueIds.get(item.id);
+            if (!existingItem || existingItem.weight < item.weight) {
+                uniqueIds.set(item.id, item);
+            }
+        }
+        
+        return Array.from(uniqueIds.values());
     }
 
     // Führt Research für Instagram-DOM durch
