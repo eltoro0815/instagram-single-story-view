@@ -37,90 +37,11 @@
     let COOLDOWN = getConfig('COOLDOWN', 2000);          // Cooldown zwischen Aktionen in ms
     let RESEARCH_MODE = getConfig('RESEARCH_MODE', true); // Aktiviert den Research-Modus
     let FORCE_RESEARCH = getConfig('FORCE_RESEARCH', true); // Erzwingt die Durchführung des Research-Modus
-    let PRESERVE_LOGS = getConfig('PRESERVE_LOGS', true);  // Speichert Logs über Seitennavigation hinweg
-
-    // Funktionen für persistente Logs
-    const LOG_STORAGE_KEY = 'isv_persistent_logs';
-    const MAX_STORED_LOGS = 200; // Maximale Anzahl gespeicherter Logs
-
-    // Logs aus dem localStorage laden
-    function loadStoredLogs() {
-        try {
-            const storedLogs = localStorage.getItem(LOG_STORAGE_KEY);
-            if (storedLogs) {
-                const logs = JSON.parse(storedLogs);
-                
-                if (DEBUG && PRESERVE_LOGS) {
-                    console.log('[ISV] ---------- GESPEICHERTE LOGS VON VORHERIGEN SEITENAUFRUFEN ----------');
-                    logs.forEach(entry => {
-                        if (entry.type === 'log') {
-                            console.log(`[ISV][${entry.time}] ${entry.message}`);
-                        } else if (entry.type === 'warn') {
-                            console.warn(`[ISV][${entry.time}] ${entry.message}`);
-                        } else if (entry.type === 'error') {
-                            console.error(`[ISV][${entry.time}] ${entry.message}`);
-                        } else if (entry.type === 'research') {
-                            console.log(`[ISV-RESEARCH][${entry.time}] ${entry.message}`);
-                        } else if (entry.type === 'status') {
-                            console.log(`[ISV][${entry.time}] ${entry.message}`);
-                        }
-                    });
-                    console.log('[ISV] ---------- ENDE DER GESPEICHERTEN LOGS ----------');
-                }
-                
-                return logs;
-            }
-        } catch (e) {
-            console.error('[ISV] Fehler beim Laden der gespeicherten Logs:', e);
-        }
-        return [];
-    }
-
-    // Log im localStorage speichern
-    function storeLog(type, message) {
-        if (!PRESERVE_LOGS) return;
-        
-        try {
-            let logs = loadStoredLogs();
-            const now = new Date();
-            const timeString = now.toISOString().replace('T', ' ').substring(0, 19);
-            
-            // Neuen Log-Eintrag hinzufügen
-            logs.push({
-                type: type,
-                message: message,
-                time: timeString,
-                url: window.location.href
-            });
-            
-            // Begrenze die Anzahl der Logs
-            if (logs.length > MAX_STORED_LOGS) {
-                logs = logs.slice(logs.length - MAX_STORED_LOGS);
-            }
-            
-            // Logs speichern
-            localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logs));
-        } catch (e) {
-            console.error('[ISV] Fehler beim Speichern des Logs:', e);
-        }
-    }
-
-    // Alle Logs löschen
-    function clearStoredLogs() {
-        try {
-            localStorage.removeItem(LOG_STORAGE_KEY);
-            console.log('[ISV] Alle gespeicherten Logs wurden gelöscht');
-        } catch (e) {
-            console.error('[ISV] Fehler beim Löschen der Logs:', e);
-        }
-    }
 
     // Wichtige Statusänderungen immer loggen
     const logStatus = (...args) => {
         if (DEBUG) {
-            const message = args.join(' ');
             console.log('[ISV]', ...args);
-            storeLog('status', message);
         }
     };
 
@@ -135,7 +56,6 @@
                     return;
                 }
                 lastStatusMessages[message] = true;
-                storeLog('log', message);
             } else if (args.length === 2 && typeof args[1] === 'string') {
                 // Für Meldungen mit einem zusätzlichen String-Parameter
                 const key = args[0] + ' ' + args[1];
@@ -144,20 +64,6 @@
                     return;
                 }
                 lastStatusMessages[key] = true;
-                storeLog('log', args.join(' '));
-            } else {
-                // Für komplexere Meldungen
-                const message = args.map(arg => {
-                    if (typeof arg === 'object') {
-                        try {
-                            return JSON.stringify(arg);
-                        } catch (e) {
-                            return String(arg);
-                        }
-                    }
-                    return String(arg);
-                }).join(' ');
-                storeLog('log', message);
             }
             
             console.log('[ISV]', ...args);
@@ -168,20 +74,6 @@
     const logResearch = (...args) => {
         // Immer in die Konsole schreiben, unabhängig vom DEBUG-Flag
         console.log('[ISV-RESEARCH]', ...args);
-
-        // Log-Meldung speichern
-        const message = args.map(arg => {
-            if (typeof arg === 'object') {
-                try {
-                    return JSON.stringify(arg, null, 2);
-                } catch (e) {
-                    return String(arg);
-                }
-            }
-            return String(arg);
-        }).join(' ');
-        
-        storeLog('research', message);
 
         // Speichere alle Research-Ausgaben für die Zwischenablage
         if (!window.isvResearchData) {
@@ -1095,52 +987,6 @@
         dialog.appendChild(createSetting('isv-cooldown', 'Cooldown zwischen Aktionen (ms)', COOLDOWN, 'number'));
         dialog.appendChild(createSetting('isv-research-mode', 'Research-Modus aktivieren', RESEARCH_MODE));
         dialog.appendChild(createSetting('isv-force-research', 'Research-Modus bei jedem Seitenaufruf ausführen', FORCE_RESEARCH));
-        dialog.appendChild(createSetting('isv-preserve-logs', 'Logs über Seitennavigation hinweg bewahren', PRESERVE_LOGS));
-        
-        // Log-Verwaltungs-Button
-        const logManagementContainer = document.createElement('div');
-        logManagementContainer.style.cssText = 'margin-bottom: 15px; display: flex; justify-content: space-between;';
-        
-        const clearLogsButton = document.createElement('button');
-        clearLogsButton.textContent = 'Gespeicherte Logs löschen';
-        clearLogsButton.style.cssText = `
-            padding: 8px 15px;
-            border: none;
-            background: #ff5555;
-            color: white;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        `;
-        clearLogsButton.onclick = () => {
-            clearStoredLogs();
-            // Benachrichtigung anzeigen
-            const notification = document.createElement('div');
-            notification.textContent = 'Alle gespeicherten Logs wurden gelöscht!';
-            notification.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                left: 20px;
-                background: rgba(255, 0, 0, 0.8);
-                color: white;
-                padding: 10px 15px;
-                border-radius: 4px;
-                z-index: 999999;
-                font-family: Arial, sans-serif;
-                font-weight: bold;
-            `;
-            document.body.appendChild(notification);
-            
-            // Nach 3 Sekunden ausblenden
-            setTimeout(() => {
-                notification.style.opacity = '0';
-                notification.style.transition = 'opacity 0.5s';
-                setTimeout(() => notification.remove(), 500);
-            }, 3000);
-        };
-        
-        logManagementContainer.appendChild(clearLogsButton);
-        dialog.appendChild(logManagementContainer);
         
         // Buttons
         const buttonsContainer = document.createElement('div');
@@ -1178,7 +1024,6 @@
             COOLDOWN = saveConfig('COOLDOWN', parseInt(document.getElementById('isv-cooldown').value) || 2000);
             RESEARCH_MODE = saveConfig('RESEARCH_MODE', document.getElementById('isv-research-mode').checked);
             FORCE_RESEARCH = saveConfig('FORCE_RESEARCH', document.getElementById('isv-force-research').checked);
-            PRESERVE_LOGS = saveConfig('PRESERVE_LOGS', document.getElementById('isv-preserve-logs').checked);
             
             // Dialog schließen
             dialog.remove();
@@ -1230,11 +1075,6 @@
     function init() {
         logStatus('Initialisiere');
         
-        // Lade gespeicherte Logs
-        if (PRESERVE_LOGS) {
-            loadStoredLogs();
-        }
-
         // Wenn DOM noch nicht geladen, warten
         if (document.readyState === 'loading') {
             logStatus('Dokument wird noch geladen, warte auf DOMContentLoaded');
