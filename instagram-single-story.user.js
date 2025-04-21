@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Instagram Single Story View
-// @namespace    https://github.com/eltoro0815/instagram-single-story-view
-// @version      1.0.34
+// @name           Instagram - Single Story View
+// @namespace      https://github.com/cyb3rko
+// @version        1.0.32
 // @description  Erzwingt die Einzelansicht für Instagram-Stories und verhindert die Karussell-Navigation
 // @author       eltoro0815
 // @match        https://www.instagram.com/stories/*
@@ -2271,48 +2271,150 @@
         }
     }
 
-    function onReady() {
-        logStatus('DOM bereit, starte Überwachung');
-        
-        // Initiale Prüfung
-        setTimeout(checkForStoryAndAddButton, 500);
-        
-        // Regelmäßige Prüfung
-        mainTimer = setInterval(() => {
-            // URL-Änderung erkennen
-            if (currentUrl !== location.href) {
-                logStatus('URL hat sich geändert', currentUrl, '->', location.href);
-                currentUrl = location.href;
-                buttonShown = false;
-                // Bei URL-Änderung Cache für wiederholte Meldungen zurücksetzen
-                lastStatusMessages = {};
+    // Ensures research buttons exist on the page
+    function ensureResearchButtonExists() {
+        try {
+            const url = window.location.href;
+            log("Ensuring research buttons exist for URL: " + url);
+            
+            // Only add research buttons if we're on Instagram
+            if (!url.includes('instagram.com')) {
+                log("Not on Instagram, skipping research buttons");
+                return;
             }
             
-            checkForStoryAndAddButton();
-        }, CHECK_INTERVAL);
-        
-        // URL-Änderungen überwachen (History API)
-        const originalPushState = history.pushState;
-        history.pushState = function() {
-            originalPushState.apply(this, arguments);
+            // Add research buttons if not already present
+            if (!document.getElementById('isv-settings-button')) {
+                log("Adding settings button");
+                addSettingsButton();
+            }
             
-            logStatus('pushState erkannt');
-            currentUrl = location.href;
-                buttonShown = false;
-            // Bei URL-Änderung Cache für wiederholte Meldungen zurücksetzen
-            lastStatusMessages = {};
-            setTimeout(checkForStoryAndAddButton, 500);
+            if (!document.getElementById('isv-research-button')) {
+                log("Adding research button");
+                addResearchButton();
+            }
+
+            if (!document.getElementById('isv-specific-id-search-button')) {
+                log("Adding specific ID search button");
+                addSpecificIdSearchButton();
+            }
+
+            if (!document.getElementById('isv-navigation-id-button')) {
+                log("Adding navigation ID finder button");
+                addNavigationIDFinderButton();
+            }
+            
+            // For story pages, ensure story buttons are visible
+            if (url.includes('/stories/')) {
+                if (!document.getElementById('isv-button')) {
+                    log("Adding single view button for story");
+                    addSingleViewButton();
+                }
+                
+                if (!document.getElementById('isv-id-list-button')) {
+                    log("Adding ID list button for story");
+                    addStoryIdListButton();
+                }
+            }
+            
+            // Check if buttons are actually visible
+            setTimeout(() => {
+                const buttons = [
+                    'isv-settings-button',
+                    'isv-research-button',
+                    'isv-specific-id-search-button',
+                    'isv-navigation-id-button',
+                    'isv-button',
+                    'isv-id-list-button'
+                ];
+                
+                buttons.forEach(buttonId => {
+                    const button = document.getElementById(buttonId);
+                    if (button) {
+                        const visible = isVisible(button);
+                        log(`Button ${buttonId} exists and is ${visible ? 'visible' : 'not visible'}`);
+                        
+                        // If button exists but is not visible, try to make it visible
+                        if (!visible) {
+                            button.style.display = 'block';
+                            button.style.visibility = 'visible';
+                            button.style.opacity = '1';
+                        }
+                    }
+                });
+            }, 1000);
+        } catch (error) {
+            log("Error in ensureResearchButtonExists: " + error.message);
+        }
+    }
+
+    // Helper function to check if an element is visible
+    function isVisible(elem) {
+        if (!elem) return false;
+        const style = window.getComputedStyle(elem);
+        return style.display !== 'none' && 
+               style.visibility !== 'hidden' && 
+               style.opacity !== '0' &&
+               elem.offsetWidth > 0 &&
+               elem.offsetHeight > 0;
+    }
+
+    // Called when the DOM is ready
+    function onReady() {
+        try {
+            log("DOM ready");
+            
+            // Get the current URL
+            const url = window.location.href;
+            
+            // Check if we're on a story page and add buttons
+            if (url.includes("/stories/")) {
+                log("Story page detected, initializing...");
+                checkForStoryAndAddButton();
+            }
+            
+            // Always ensure research buttons exist
+            ensureResearchButtonExists();
+            
+            // Monitor URL changes
+            observeUrlChanges();
+        } catch (error) {
+            log("Error in onReady: " + error.message);
+        }
+    }
+
+    // Monitor URL changes
+    function observeUrlChanges() {
+        // Track navigation events
+        const pushState = history.pushState;
+        history.pushState = function() {
+            pushState.apply(history, arguments);
+            handleUrlChange();
         };
         
-        // Zurück-Button überwachen
-        window.addEventListener('popstate', () => {
-            logStatus('popstate erkannt');
-            currentUrl = location.href;
-            buttonShown = false;
-            // Bei URL-Änderung Cache für wiederholte Meldungen zurücksetzen
-            lastStatusMessages = {};
-            setTimeout(checkForStoryAndAddButton, 500);
-        });
+        window.addEventListener('popstate', handleUrlChange);
+        
+        // Initial call
+        handleUrlChange();
+    }
+
+    // Handle URL changes
+    function handleUrlChange() {
+        try {
+            const url = window.location.href;
+            log("URL changed: " + url);
+            
+            // Check if we're on a story page
+            if (url.includes("/stories/")) {
+                log("Story page detected after URL change");
+                checkForStoryAndAddButton();
+            }
+            
+            // Always ensure research buttons exist after URL change
+            setTimeout(ensureResearchButtonExists, 500);
+        } catch (error) {
+            log("Error in handleUrlChange: " + error.message);
+        }
     }
 
     // Funktion zum Suchen einer spezifischen ID im gesamten DOM
