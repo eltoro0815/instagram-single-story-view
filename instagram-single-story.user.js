@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Instagram Single Story View
 // @namespace    https://github.com/eltoro0815/instagram-single-story-view
-// @version      1.0.4
+// @version      1.0.5
 // @description  Erzwingt die Einzelansicht für Instagram-Stories und verhindert die Karussell-Navigation
 // @author       eltoro0815
 // @match        https://www.instagram.com/stories/*
 // @grant        none
 // @updateURL    https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js
 // @downloadURL  https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js
+// @run-at       document-start
 // ==/UserScript==
 
 (function() {
@@ -17,6 +18,7 @@
     const RETRY_INTERVAL = 250; // ms
     const MAX_RETRIES = 10;
     const DEBUG = true; // Debug-Modus für ausführlichere Logausgaben
+    const ENABLE_DOM_ANALYSIS = true; // Aktiviert die DOM-Analyse für Debugging
     
     // Schutz vor Endlosschleifen
     let isProcessing = false;
@@ -36,6 +38,12 @@
     
     // Speichere gefundene Story IDs
     let lastFoundStoryId = null;
+    
+    // Debug-Sammlung
+    let domStructureData = null;
+    
+    // Initiale Meldung beim Laden
+    console.log(`[Instagram Single Story] Skript wird geladen - Version 1.0.5`);
 
     // Logger-Funktion für Debug-Zwecke
     const log = (message) => {
@@ -48,6 +56,168 @@
             console.log(`[Instagram Single Story Debug] ${message}`);
         }
     };
+    
+    /**
+     * Analysiert die DOM-Struktur und speichert wichtige Informationen
+     * @returns {Object} DOM-Struktur-Daten
+     */
+    function analyzeDOMStructure() {
+        if (!ENABLE_DOM_ANALYSIS) return null;
+        
+        try {
+            // Relevante Selektoren für die Analyse
+            const selectors = {
+                nextButtons: ['button[aria-label="Weiter"]', 'button[aria-label="Next"]', 'button[aria-label="Nächstes Element"]', '[aria-label*="next"]', '[aria-label*="Next"]', 'button[aria-label*="nächste"]'],
+                prevButtons: ['button[aria-label="Zurück"]', 'button[aria-label="Previous"]', 'button[aria-label="Vorheriges Element"]', '[aria-label*="previous"]', '[aria-label*="Previous"]', 'button[aria-label*="vorherige"]'],
+                progressBars: ['[role="progressbar"]', '[class*="progress"]', '[class*="Progress"]'],
+                storyContainers: ['[data-visualcompletion="loading-state"]', '[class*="story"]', '[class*="Story"]'],
+                mediaElements: ['img[srcset]', 'video source', 'img[src]', 'video'],
+                storyCounters: ['div[class*="count"]', 'span[class*="count"]']
+            };
+            
+            const results = {
+                url: window.location.href,
+                timestamp: new Date().toISOString(),
+                foundElements: {},
+                activeSelectors: {}
+            };
+            
+            // Für jeden Selektor-Typ prüfen, welche konkreten Selektoren funktionieren
+            for (const [type, selectorList] of Object.entries(selectors)) {
+                results.foundElements[type] = [];
+                results.activeSelectors[type] = [];
+                
+                for (const selector of selectorList) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                        results.activeSelectors[type].push(selector);
+                        
+                        // Sammle Informationen zu den gefundenen Elementen
+                        Array.from(elements).slice(0, 3).forEach(el => {
+                            const elementInfo = {
+                                tagName: el.tagName,
+                                className: el.className,
+                                id: el.id,
+                                attributes: {},
+                                parentInfo: el.parentElement ? {
+                                    tagName: el.parentElement.tagName,
+                                    className: el.parentElement.className
+                                } : null
+                            };
+                            
+                            // Attribute sammeln
+                            Array.from(el.attributes).forEach(attr => {
+                                elementInfo.attributes[attr.name] = attr.value;
+                            });
+                            
+                            results.foundElements[type].push(elementInfo);
+                        });
+                    }
+                }
+            }
+            
+            // Zusätzliche Informationen über Medien sammeln
+            const mediaElements = document.querySelectorAll('img[src], video source');
+            results.mediaUrls = Array.from(mediaElements).slice(0, 5).map(el => el.src || el.srcset);
+            
+            // Für Story-IDs relevante Informationen
+            results.potentialStoryIds = [];
+            
+            // Suche nach IDs in URLs
+            const urlsWithIds = document.querySelectorAll('a[href*="stories"]');
+            Array.from(urlsWithIds).forEach(el => {
+                const match = el.href.match(/\/stories\/[^\/]+\/(\d+)/);
+                if (match && match[1]) {
+                    results.potentialStoryIds.push({
+                        source: 'href',
+                        id: match[1],
+                        element: {
+                            tagName: el.tagName,
+                            className: el.className
+                        }
+                    });
+                }
+            });
+            
+            // Suche nach IDs in Attributen
+            const elementsWithDataId = document.querySelectorAll('[data-id], [id*="story"], [class*="story"], [id*="media"], [class*="media"]');
+            Array.from(elementsWithDataId).slice(0, 10).forEach(el => {
+                const dataId = el.getAttribute('data-id');
+                if (dataId && /^\d+$/.test(dataId)) {
+                    results.potentialStoryIds.push({
+                        source: 'data-id',
+                        id: dataId,
+                        element: {
+                            tagName: el.tagName,
+                            className: el.className
+                        }
+                    });
+                }
+            });
+            
+            // Speichere die Ergebnisse
+            domStructureData = results;
+            
+            // Wenn Debug aktiviert ist, in die Konsole ausgeben
+            if (DEBUG) {
+                console.log('==== DOM-STRUKTUR-ANALYSE ====');
+                console.log(JSON.stringify(results, null, 2));
+                console.log('==============================');
+            }
+            
+            return results;
+        } catch (e) {
+            console.error(`[Instagram Single Story] Fehler bei DOM-Analyse: ${e.message}`);
+            return null;
+        }
+    }
+    
+    /**
+     * Exportiert die gesammelten Debug-Daten als JSON zum Download
+     */
+    function exportDebugData() {
+        if (!domStructureData) {
+            analyzeDOMStructure();
+        }
+        
+        if (!domStructureData) {
+            alert('Keine Debug-Daten verfügbar. Bitte versuche es erneut.');
+            return;
+        }
+        
+        // Daten vorbereiten
+        const data = {
+            scriptVersion: '1.0.5',
+            timestamp: new Date().toISOString(),
+            url: window.location.href,
+            userAgent: navigator.userAgent,
+            domStructure: domStructureData
+        };
+        
+        // JSON erstellen und zum Download anbieten
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        // Download-Link erstellen
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `instagram-story-debug-${new Date().toISOString().replace(/:/g, '-')}.json`;
+        a.click();
+        
+        // Ressourcen freigeben
+        setTimeout(() => {
+            URL.revokeObjectURL(url);
+        }, 100);
+    }
+
+    // Füge eine Debug-Taste hinzu (STRG+SHIFT+I)
+    document.addEventListener('keydown', e => {
+        if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+            debugLog('Debug-Taste gedrückt - exportiere Daten');
+            exportDebugData();
+        }
+    });
 
     /**
      * Überprüft, ob es sich um eine Story-URL handelt
@@ -90,9 +260,21 @@
      */
     function isCarouselView() {
         try {
+            // Bei URL ohne Story-ID ist es immer ein Karussell
+            if (!isFullStoryUrl()) {
+                debugLog("URL ohne Story-ID - definitiv ein Karussell");
+                return true;
+            }
+            
+            // Wenn keine Seite geladen ist
+            if (!document.body) {
+                debugLog("Document body noch nicht verfügbar");
+                return true;
+            }
+            
             // Prüfen auf Navigations-Elemente, die typisch für das Karussell sind
-            const nextStoryBtn = document.querySelector('button[aria-label="Weiter"] svg, button[aria-label="Next"] svg, button[aria-label="Nächstes Element"] svg, [aria-label*="next"], [aria-label*="Next"], button[aria-label*="nächste"]');
-            const prevStoryBtn = document.querySelector('button[aria-label="Zurück"] svg, button[aria-label="Previous"] svg, button[aria-label="Vorheriges Element"] svg, [aria-label*="previous"], [aria-label*="Previous"], button[aria-label*="vorherige"]');
+            const nextStoryBtn = document.querySelector('button[aria-label="Weiter"], button[aria-label="Next"], button[aria-label="Nächstes Element"], [aria-label*="next"], [aria-label*="Next"], button[aria-label*="nächste"]');
+            const prevStoryBtn = document.querySelector('button[aria-label="Zurück"], button[aria-label="Previous"], button[aria-label="Vorheriges Element"], [aria-label*="previous"], [aria-label*="Previous"], button[aria-label*="vorherige"]');
             
             // Prüfe auf mehrere Fortschrittsbalken/Indikatoren
             const progressBars = document.querySelectorAll('[role="progressbar"], [class*="progress"], [class*="Progress"]');
@@ -104,8 +286,11 @@
             
             // Prüfe auf typische Story-Karussell-Container
             const storyTray = document.querySelector('[data-visualcompletion="loading-state"], div[style*="transform"]');
-
-            const isCarousel = (nextStoryBtn !== null || prevStoryBtn !== null || multipleProgressBars || multipleStoryElements);
+            
+            // Prüfe auf Seitennummern oder Indikatoren (z.B. 1/5)
+            const storyCounters = document.querySelectorAll('div[class*="count"], span[class*="count"]');
+            
+            const isCarousel = (nextStoryBtn !== null || prevStoryBtn !== null || multipleProgressBars || multipleStoryElements || storyCounters.length > 0);
             
             if (DEBUG) {
                 const elementsFound = [];
@@ -114,14 +299,15 @@
                 if (multipleProgressBars) elementsFound.push("Mehrere Fortschrittsbalken");
                 if (multipleStoryElements) elementsFound.push("Mehrere Story-Elemente");
                 if (storyTray !== null) elementsFound.push("Story-Tray");
+                if (storyCounters.length > 0) elementsFound.push("Story-Zähler");
                 
-                debugLog(`Karussell-Erkennung: ${isCarousel} (Elemente: ${elementsFound.join(', ')})`);
+                debugLog(`Karussell-Erkennung: ${isCarousel} (Elemente: ${elementsFound.join(', ') || 'keine gefunden'})`);
             }
             
             return isCarousel;
         } catch (e) {
             log(`Fehler bei Karussell-Erkennung: ${e.message}`);
-            return false;
+            return true; // Im Zweifelsfall als Karussell behandeln
         }
     }
 
@@ -148,7 +334,20 @@
                 return urlStoryId;
             }
             
-            // Strategie 1: Suche nach Bild/Video-Elementen mit src/srcset-Attributen
+            // Strategie 1: Suche nach ersten geteilten Story-Elementen
+            // Diese sind oft leichter zu identifizieren als unten in der Media-Liste
+            const storyLinks = document.querySelectorAll('a[href*="stories"]');
+            for (const link of storyLinks) {
+                debugLog(`Prüfe Story-Link: ${link.href}`);
+                const match = link.href.match(/\/stories\/[^\/]+\/(\d+)/);
+                if (match && match[1]) {
+                    debugLog(`ID aus Story-Link extrahiert: ${match[1]}`);
+                    lastFoundStoryId = match[1];
+                    return match[1];
+                }
+            }
+            
+            // Strategie 2: Suche nach Bild/Video-Elementen mit src/srcset-Attributen
             const mediaElements = document.querySelectorAll('img[srcset], video source, img[src], video');
             debugLog(`Gefundene Medienelemente: ${mediaElements.length}`);
             
@@ -177,20 +376,6 @@
                             }
                         }
                     }
-                }
-            }
-            
-            // Strategie 2: Suche nach Links, die möglicherweise die Story-ID enthalten
-            const links = document.querySelectorAll('a[href*="stories"]');
-            debugLog(`Gefundene Story-Links: ${links.length}`);
-            
-            for (const link of links) {
-                debugLog(`Prüfe Link: ${link.href}`);
-                const match = link.href.match(/\/stories\/[^\/]+\/(\d+)/);
-                if (match && match[1]) {
-                    debugLog(`ID aus Link extrahiert: ${match[1]}`);
-                    lastFoundStoryId = match[1];
-                    return match[1];
                 }
             }
             
@@ -228,6 +413,35 @@
                     debugLog(`ID aus URL-Pfad extrahiert: ${part}`);
                     lastFoundStoryId = part;
                     return part;
+                }
+            }
+            
+            // Strategie 5: Prüfe, ob aktuelle Story-Elemente einen identifizierbaren Pfad haben
+            const activeStoryElements = document.querySelectorAll('[aria-selected="true"], .active, [class*="active"], [class*="current"]');
+            for (const element of activeStoryElements) {
+                const allLinks = element.querySelectorAll('a');
+                for (const link of allLinks) {
+                    const href = link.getAttribute('href') || '';
+                    const match = href.match(/\/stories\/[^\/]+\/(\d+)/);
+                    if (match && match[1]) {
+                        debugLog(`ID von aktivem Story-Element: ${match[1]}`);
+                        lastFoundStoryId = match[1];
+                        return match[1];
+                    }
+                }
+            }
+            
+            // Strategie 6: Schau nach Daten-Attributen in globalen Script-Tags
+            const scripts = document.querySelectorAll('script:not([src])');
+            for (const script of scripts) {
+                const text = script.textContent;
+                if (text && text.includes('story_id') || text.includes('media_id')) {
+                    const match = text.match(/"(story_id|media_id)"\s*:\s*"?(\d{5,})"?/);
+                    if (match && match[2]) {
+                        debugLog(`ID aus Script-Tag: ${match[2]}`);
+                        lastFoundStoryId = match[2];
+                        return match[2];
+                    }
                 }
             }
             
@@ -394,6 +608,7 @@
             padding: 8px 12px;
             font-weight: bold;
             cursor: pointer;
+            font-family: Arial, sans-serif;
         `;
         
         button.addEventListener('click', () => {
@@ -418,6 +633,7 @@
         
         document.body.appendChild(button);
         buttonShown = true;
+        log('Button zur Einzelansicht hinzugefügt');
     }
 
     /**
@@ -461,6 +677,33 @@
             const username = extractUsername();
             if (!username) {
                 log('Konnte keinen Benutzernamen finden');
+                isProcessing = false;
+                return;
+            }
+            
+            // Stelle sicher, dass wir durch die URL ohne Story-ID nicht durchrutschen
+            if (!isFullStoryUrl()) {
+                log('URL ohne Story-ID erkannt, zeige Button an');
+                const storyId = extractStoryIdFromDOM();
+                if (storyId) {
+                    log(`Story-ID aus DOM gefunden: ${storyId}`);
+                    updateButtonState(true, storyId);
+                    
+                    // Automatische Umleitung bei ID-Fund
+                    if (!buttonClicked) {
+                        redirectToSingleStoryView(username, storyId);
+                    }
+                } else if (retryCount < MAX_RETRIES) {
+                    // Wenn keine Story-ID gefunden wurde, erneut versuchen
+                    log(`Konnte keine Story-ID finden. Versuche erneut (${retryCount + 1}/${MAX_RETRIES})...`);
+                    isProcessing = false;
+                    setTimeout(() => processSingleStoryView(retryCount + 1), RETRY_INTERVAL);
+                    return;
+                } else {
+                    log('Konnte keine Story-ID für URL ohne ID finden. Versuche den Button zu zeigen.');
+                    addManualToggleButton();
+                }
+                
                 isProcessing = false;
                 return;
             }
@@ -524,109 +767,147 @@
         }
     }
 
-    // Starten der Hauptfunktion, sobald die Seite geladen ist
-    // Warte einen Moment, damit die Seite vollständig geladen ist
-    setTimeout(() => {
-        debugLog("Instagram Single Story View gestartet");
-        processSingleStoryView();
-    }, 1000);
+    // Bei document-start initialisieren - garantiert frühe Ausführung
+    debugLog("Instagram Single Story View gestartet - Warte auf DOM");
     
-    // MutationObserver mit stärkerem Ratelimiting
-    const observerCallback = (mutations) => {
-        const now = Date.now();
-        if (now - lastObserverHandlingTime < OBSERVER_HANDLING_COOLDOWN) {
-            return;
+    // Warten, bis das Dokument geladen ist, bevor wir starten
+    function init() {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', onReady);
+        } else {
+            onReady();
         }
+    }
+    
+    function onReady() {
+        debugLog("DOM geladen, starte Verarbeitung");
+        setTimeout(() => {
+            processSingleStoryView();
+        }, 500);
         
-        lastObserverHandlingTime = now;
-        
-        // Prüfe, ob wir die maximale Anzahl von Versuchen erreicht haben
-        if (processAttempts >= MAX_PROCESS_ATTEMPTS && !buttonClicked) {
-            // Selbst bei maximalen Versuchen zeigen wir den Button an, wenn ein Karussell erkannt wurde
-            const isCarousel = isCarouselView();
-            if (isCarousel) {
-                const storyId = extractStoryIdFromDOM() || extractStoryIdFromUrl();
-                if (storyId) {
-                    updateButtonState(isCarousel, storyId);
+        // MutationObserver mit stärkerem Ratelimiting
+        const observerCallback = (mutations) => {
+            const now = Date.now();
+            if (now - lastObserverHandlingTime < OBSERVER_HANDLING_COOLDOWN) {
+                return;
+            }
+            
+            lastObserverHandlingTime = now;
+            
+            // Prüfe, ob wir die maximale Anzahl von Versuchen erreicht haben
+            if (processAttempts >= MAX_PROCESS_ATTEMPTS && !buttonClicked) {
+                // Selbst bei maximalen Versuchen zeigen wir den Button an, wenn ein Karussell erkannt wurde
+                const isCarousel = isCarouselView();
+                if (isCarousel) {
+                    const storyId = extractStoryIdFromDOM() || extractStoryIdFromUrl();
+                    if (storyId) {
+                        updateButtonState(isCarousel, storyId);
+                    }
+                }
+                return;
+            }
+            
+            for (const mutation of mutations) {
+                if (mutation.type === 'childList' && isStoryPage() && !isProcessing && !buttonClicked) {
+                    debugLog('DOM-Änderung erkannt, starte Verarbeitung neu');
+                    setTimeout(() => processSingleStoryView(), 500);
+                    break;
                 }
             }
-            return;
+        };
+        
+        const observer = new MutationObserver(observerCallback);
+        window.instagramSingleStoryObserver = observer;
+        
+        // Beobachtung des Body-Elements für Änderungen starten
+        if (document.body) {
+            observer.observe(document.body, { childList: true, subtree: false });
         }
         
-        for (const mutation of mutations) {
-            if (mutation.type === 'childList' && isStoryPage() && !isProcessing && !buttonClicked) {
-                debugLog('DOM-Änderung erkannt, starte Verarbeitung neu');
-                setTimeout(() => processSingleStoryView(), 500);
-                break;
-            }
-        }
-    };
-    
-    const observer = new MutationObserver(observerCallback);
-    window.instagramSingleStoryObserver = observer;
-    
-    // Beobachtung des Body-Elements für Änderungen starten
-    // Beobachte nicht zu detailliert, um Endlosschleifen zu vermeiden
-    observer.observe(document.body, { childList: true, subtree: false });
-    
-    // Bei Änderungen der URL (History API) ebenfalls die Funktion ausführen
-    // Verwende das originale history nur einmal
-    const originalPushState = history.pushState;
-    history.pushState = function() {
-        originalPushState.apply(this, arguments);
-        
-        if (isStoryPage() && !isProcessing) {
-            debugLog('pushState erkannt');
-            // Zurücksetzen der Versuche bei URL-Änderung
-            processAttempts = 0;
-            redirectCount = 0;
-            buttonClicked = false;
-            isInSingleView = false;
-            // Wichtig: Bei URL-Änderung auch die lastFoundStoryId zurücksetzen
-            lastFoundStoryId = null;
-            setTimeout(() => processSingleStoryView(), 1000);
-        }
-    };
-    
-    // Reagieren auf popstate-Events (z.B. Zurück-Button im Browser)
-    window.addEventListener('popstate', () => {
-        if (isStoryPage() && !isProcessing) {
-            debugLog('popstate erkannt');
-            // Zurücksetzen der Versuche bei URL-Änderung
-            processAttempts = 0;
-            redirectCount = 0;
-            buttonClicked = false;
-            isInSingleView = false;
-            // Wichtig: Bei URL-Änderung auch die lastFoundStoryId zurücksetzen
-            lastFoundStoryId = null;
-            setTimeout(() => processSingleStoryView(), 1000);
-        }
-    });
-
-    // Event-Listener für Klicks mit Ratelimiting
-    let lastClickProcess = 0;
-    const CLICK_PROCESS_COOLDOWN = 1000; // ms
-    
-    document.addEventListener('click', (event) => {
-        const now = Date.now();
-        if (now - lastClickProcess < CLICK_PROCESS_COOLDOWN) {
-            return;
-        }
-        
-        lastClickProcess = now;
-        
-        // Verzögere die Prüfung um der Navigation Zeit zu geben
-        setTimeout(() => {
-            if (isStoryPage() && !isProcessing && !buttonClicked) {
-                debugLog('Story-Navigation nach Klick erkannt');
-                // Zurücksetzen der Versuche bei neuer Navigation
+        // Bei Änderungen der URL (History API) ebenfalls die Funktion ausführen
+        // Verwende das originale history nur einmal
+        const originalPushState = history.pushState;
+        history.pushState = function() {
+            originalPushState.apply(this, arguments);
+            
+            if (isStoryPage() && !isProcessing) {
+                debugLog('pushState erkannt');
+                // Zurücksetzen der Versuche bei URL-Änderung
                 processAttempts = 0;
                 redirectCount = 0;
+                buttonClicked = false;
                 isInSingleView = false;
-                // Wichtig: Bei Klick auch die lastFoundStoryId zurücksetzen
+                // Wichtig: Bei URL-Änderung auch die lastFoundStoryId zurücksetzen
                 lastFoundStoryId = null;
-                processSingleStoryView();
+                setTimeout(() => processSingleStoryView(), 1000);
             }
-        }, 1000);
-    }, true);
+        };
+        
+        // Reagieren auf popstate-Events (z.B. Zurück-Button im Browser)
+        window.addEventListener('popstate', () => {
+            if (isStoryPage() && !isProcessing) {
+                debugLog('popstate erkannt');
+                // Zurücksetzen der Versuche bei URL-Änderung
+                processAttempts = 0;
+                redirectCount = 0;
+                buttonClicked = false;
+                isInSingleView = false;
+                // Wichtig: Bei URL-Änderung auch die lastFoundStoryId zurücksetzen
+                lastFoundStoryId = null;
+                setTimeout(() => processSingleStoryView(), 1000);
+            }
+        });
+    
+        // Event-Listener für Klicks mit Ratelimiting
+        let lastClickProcess = 0;
+        const CLICK_PROCESS_COOLDOWN = 1000; // ms
+        
+        document.addEventListener('click', (event) => {
+            const now = Date.now();
+            if (now - lastClickProcess < CLICK_PROCESS_COOLDOWN) {
+                return;
+            }
+            
+            lastClickProcess = now;
+            
+            // Verzögere die Prüfung um der Navigation Zeit zu geben
+            setTimeout(() => {
+                if (isStoryPage() && !isProcessing && !buttonClicked) {
+                    debugLog('Story-Navigation nach Klick erkannt');
+                    // Zurücksetzen der Versuche bei neuer Navigation
+                    processAttempts = 0;
+                    redirectCount = 0;
+                    isInSingleView = false;
+                    // Wichtig: Bei Klick auch die lastFoundStoryId zurücksetzen
+                    lastFoundStoryId = null;
+                    processSingleStoryView();
+                }
+            }, 1000);
+        }, true);
+    }
+    
+    // Initialisierung starten
+    init();
+
+    // Analyse bei DOM-Ready und nach jedem Navigationsvorgang durchführen
+    function runDOMAnalysis() {
+        if (ENABLE_DOM_ANALYSIS && isStoryPage()) {
+            setTimeout(() => {
+                analyzeDOMStructure();
+                debugLog('DOM-Analyse abgeschlossen');
+            }, 1500); // Verzögerung, um sicherzustellen, dass die Seite geladen ist
+        }
+    }
+    
+    // Füge die Analyse zu vorhandenen Funktionen hinzu
+    const originalProcessSingleStoryView = processSingleStoryView;
+    processSingleStoryView = function(retryCount = 0) {
+        // Original-Funktion ausführen
+        const result = originalProcessSingleStoryView.call(this, retryCount);
+        
+        // DOM-Analyse hinzufügen
+        runDOMAnalysis();
+        
+        return result;
+    };
 })(); 
