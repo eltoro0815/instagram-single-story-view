@@ -282,7 +282,7 @@
         
         const button = document.createElement('button');
         button.id = 'isv-specific-id-search-button';
-        button.textContent = 'Suche 3615862947608863320';
+        button.textContent = 'Nach spezifischer ID suchen';  // Geändert: Kein direktes Anzeigen der ID
         button.style.cssText = `
             position: fixed;
             top: 50px;
@@ -300,6 +300,7 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.3);
         `;
         
+        // Die ID ist nun nur im Eventhandler gespeichert, nicht im Button-Text
         button.addEventListener('click', function() {
             searchForSpecificId('3615862947608863320');
         });
@@ -1598,27 +1599,45 @@
         // Ergebnisse sammeln
         const results = [];
         
-        // 1. Suche im HTML-Rohtext
+        // 1. Suche im HTML-Rohtext, aber ignoriere unseren eigenen Button
         const htmlContent = document.documentElement.outerHTML;
-        const htmlMatches = htmlContent.includes(specificId);
+        // Neuer Ansatz: Zähle die Vorkommen der ID
+        const idRegex = new RegExp(specificId, 'g');
+        const matches = htmlContent.match(idRegex) || [];
+        const occurrences = matches.length;
         
-        if (htmlMatches) {
+        if (occurrences > 0) {
             results.push({
                 source: "HTML-Gesamttext",
                 matches: true,
-                context: "Die ID kommt im HTML-Text vor"
+                count: occurrences,
+                context: `Die ID kommt ${occurrences} Mal im HTML-Text vor`
             });
             
-            // Extrahiere Kontext um die ID herum
-            const indexOfId = htmlContent.indexOf(specificId);
-            const start = Math.max(0, indexOfId - 100);
-            const end = Math.min(htmlContent.length, indexOfId + specificId.length + 100);
-            const contextText = htmlContent.substring(start, end);
-            
-            results.push({
-                source: "HTML-Kontext",
-                context: contextText
-            });
+            // Für jedes Vorkommen den Kontext extrahieren
+            let lastIndex = 0;
+            for (let i = 0; i < occurrences; i++) {
+                lastIndex = htmlContent.indexOf(specificId, lastIndex);
+                if (lastIndex !== -1) {
+                    const start = Math.max(0, lastIndex - 100);
+                    const end = Math.min(htmlContent.length, lastIndex + specificId.length + 100);
+                    const contextText = htmlContent.substring(start, end);
+                    
+                    // Prüfe, ob es sich um unseren Button handelt
+                    if (!contextText.includes('isv-specific-id-search-button')) {
+                        results.push({
+                            source: `HTML-Kontext (Vorkommen ${i+1})`,
+                            context: contextText
+                        });
+                    } else {
+                        results.push({
+                            source: `HTML-Kontext (Vorkommen ${i+1})`,
+                            context: "Dies ist unser eigener Such-Button (ignorieren)"
+                        });
+                    }
+                    lastIndex += specificId.length;
+                }
+            }
         } else {
             results.push({
                 source: "HTML-Gesamttext",
@@ -1627,10 +1646,10 @@
             });
         }
         
-        // 2. Suche in allen Attributen
+        // 2. Suche in allen Attributen, aber ignoriere unseren eigenen Button
         const elementsWithAttributes = document.querySelectorAll('*');
         elementsWithAttributes.forEach((el, index) => {
-            if (!el.attributes) return;
+            if (!el.attributes || el.id === 'isv-specific-id-search-button') return;
             
             for (const attr of el.attributes) {
                 if (attr.value && attr.value.includes(specificId)) {
@@ -1645,8 +1664,9 @@
             }
         });
         
-        // 3. Suche in allen Textinhalten
+        // 3. Suche in allen Textinhalten, aber ignoriere unseren eigenen Button
         document.querySelectorAll('*').forEach((el, index) => {
+            if (el.id === 'isv-specific-id-search-button') return;
             if (el.textContent && el.textContent.includes(specificId) && !/^(script|style)$/i.test(el.tagName)) {
                 results.push({
                     source: `Textinhalt [${index}]`,
@@ -1759,8 +1779,56 @@
             }
         });
         
-        // 9. Suche in XHR-Anfragen (experimentell)
-        // Die tatsächliche Implementierung erfordert ein tieferes Hooking des XMLHttpRequest-Objekts
+        // 9. NEU: Suche nach Instagram-Story-URL-Mustern, die die ID enthalten könnten
+        const storyUrlPatterns = [
+            `stories/[^/]+/${specificId}`,
+            `story/[^/]+/${specificId}`,
+            `stories\\?story_id=${specificId}`,
+            `stories\\?id=${specificId}`,
+            `media\\?id=${specificId}`,
+            `reel\\?id=${specificId}`
+        ];
+        
+        storyUrlPatterns.forEach(pattern => {
+            const regex = new RegExp(pattern, 'g');
+            const matches = htmlContent.match(regex);
+            if (matches && matches.length > 0) {
+                matches.forEach(match => {
+                    results.push({
+                        source: "Story-URL-Pattern",
+                        pattern: pattern,
+                        match: match,
+                        context: "Instagram-Story-URL-Muster gefunden"
+                    });
+                });
+            }
+        });
+        
+        // 10. NEU: Untersuche auch Network-Requests, falls in der DevConsole sichtbar
+        // Dies ist experimentell und funktioniert nur in einem Browserkontext
+        console.log(`[ISV-DEBUG] Hinweis: Überprüfe auch die Network-Tab in den Entwicklertools nach Anfragen, die "${specificId}" enthalten`);
+        
+        // 11. NEU: Suche nach Strukturen, die typisch für Instagram-Daten sind
+        const instagramDataPatterns = [
+            /"media_id"\s*:\s*"[^"]*?"/g,
+            /"story_media_id"\s*:\s*"[^"]*?"/g,
+            /"reel_id"\s*:\s*"[^"]*?"/g,
+            /"story_id"\s*:\s*"[^"]*?"/g,
+            /"id"\s*:\s*"[^"]*?"/g
+        ];
+        
+        instagramDataPatterns.forEach(pattern => {
+            const matches = htmlContent.match(pattern);
+            if (matches && matches.length > 0) {
+                results.push({
+                    source: "Instagram-Datenstruktur",
+                    pattern: pattern.toString(),
+                    matches: matches.slice(0, 5), // Limitiere auf 5 Beispiele
+                    count: matches.length,
+                    context: "Mögliche Instagram-Datenstrukturen für Story-IDs"
+                });
+            }
+        });
         
         // Ausgabe der Ergebnisse
         console.log(`[ISV-DEBUG] Suche nach ID ${specificId} abgeschlossen.`);
@@ -1773,19 +1841,31 @@
         if (results.length === 0) {
             alertText += "Keine Treffer gefunden. Die ID scheint nicht im DOM zu existieren.";
         } else {
-            results.forEach((result, index) => {
-                alertText += `${index + 1}. ${result.source}:\n`;
-                if (result.element) alertText += `   Element: ${result.element}\n`;
-                if (result.attribute) alertText += `   Attribut: ${result.attribute}\n`;
-                if (result.context) {
-                    // Kürze den Kontext für das Alert-Fenster
-                    const shortContext = result.context.length > 100 
-                        ? result.context.substring(0, 100) + "..." 
-                        : result.context;
-                    alertText += `   Kontext: ${shortContext}\n`;
-                }
-                alertText += "\n";
-            });
+            // Filtere unseren eigenen Button heraus
+            const filteredResults = results.filter(result => 
+                !result.context || !result.context.includes('isv-specific-id-search-button')
+            );
+            
+            if (filteredResults.length === 0) {
+                alertText += "Keine relevanten Treffer gefunden (nur unser eigener Button).";
+            } else {
+                filteredResults.forEach((result, index) => {
+                    alertText += `${index + 1}. ${result.source}:\n`;
+                    if (result.element) alertText += `   Element: ${result.element}\n`;
+                    if (result.attribute) alertText += `   Attribut: ${result.attribute}\n`;
+                    if (result.pattern) alertText += `   Pattern: ${result.pattern}\n`;
+                    if (result.matches) alertText += `   Treffer: ${result.matches.length}\n`;
+                    if (result.count) alertText += `   Anzahl: ${result.count}\n`;
+                    if (result.context) {
+                        // Kürze den Kontext für das Alert-Fenster
+                        const shortContext = result.context.length > 100 
+                            ? result.context.substring(0, 100) + "..." 
+                            : result.context;
+                        alertText += `   Kontext: ${shortContext}\n`;
+                    }
+                    alertText += "\n";
+                });
+            }
         }
         
         alert(alertText);
