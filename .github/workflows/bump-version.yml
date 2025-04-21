@@ -3,7 +3,7 @@ name: Bump Version
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'instagram-single-story.user.js'
 

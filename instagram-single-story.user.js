@@ -6,8 +6,8 @@
 // @author       eltoro0815
 // @match        https://www.instagram.com/stories/*
 // @grant        none
-// @updateURL    https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/main/instagram-single-story.user.js
-// @downloadURL  https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/main/instagram-single-story.user.js
+// @updateURL    https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js
+// @downloadURL  https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js
 // ==/UserScript==
 
 (function() {

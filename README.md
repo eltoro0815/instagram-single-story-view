@@ -14,29 +14,29 @@ Dieses Tampermonkey-Userscript erzwingt die Einzelansicht für Instagram-Stories
 ### Desktop-Browser
 
 1. Installiere die [Tampermonkey-Erweiterung](https://www.tampermonkey.net/) für deinen Browser
-2. Klicke auf diesen direkten Installationslink: [Instagram Single Story View Script](https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/main/instagram-single-story.user.js)
+2. Klicke auf diesen direkten Installationslink: [Instagram Single Story View Script](https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js)
 3. Klicke im Tampermonkey-Installationsdialog auf "Installieren"
 
 Alternativ:
 1. Öffne das Tampermonkey-Dashboard
 2. Gehe zum Tab "Dienstprogramme"
-3. Füge diese URL in das Feld "URL importieren" ein: `https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/main/instagram-single-story.user.js`
+3. Füge diese URL in das Feld "URL importieren" ein: `https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js`
 4. Klicke auf "Installieren"
 
 ### Mobile Browser (Android)
 
 1. Installiere den [Kiwi Browser](https://play.google.com/store/apps/details?id=com.kiwibrowser.browser) aus dem Google Play Store
 2. Installiere die [Tampermonkey-Erweiterung](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo) aus dem Chrome Web Store im Kiwi Browser
-3. Öffne diesen Link im Kiwi Browser: [Instagram Single Story View Script](https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/main/instagram-single-story.user.js)
+3. Öffne diesen Link im Kiwi Browser: [Instagram Single Story View Script](https://raw.githubusercontent.com/eltoro0815/instagram-single-story-view/master/instagram-single-story.user.js)
 4. Installiere das Script wie oben beschrieben
 
 ## Automatische Updates
 
-Das Script aktualisiert sich automatisch, wenn eine neue Version verfügbar ist. Die Version wird durch einen GitHub Actions Workflow erhöht, der bei jedem Commit auf den `main`-Branch ausgeführt wird.
+Das Script aktualisiert sich automatisch, wenn eine neue Version verfügbar ist. Die Version wird durch einen GitHub Actions Workflow erhöht, der bei jedem Commit auf den `master`-Branch ausgeführt wird.
 
 ### Wie funktioniert die automatische Versionierung?
 
-1. Bei jedem Push auf den `main`-Branch wird die GitHub Action `.github/workflows/bump-version.yml` ausgeführt
+1. Bei jedem Push auf den `master`-Branch wird die GitHub Action `.github/workflows/bump-version.yml` ausgeführt
 2. Die Action extrahiert die aktuelle Versionsnummer aus dem Script
 3. Die Patch-Version wird um 1 erhöht (z.B. 1.0.0 → 1.0.1)
 4. Die neue Version wird ins Script zurückgeschrieben und committet
