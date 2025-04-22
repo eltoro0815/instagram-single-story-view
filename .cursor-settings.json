@@ -1,0 +1,12 @@
+{
+  "ai": {
+    "customRules": [
+      {
+        "rule": "Die Versionsnummer im UserScript-Header (`// @version`) wird automatisch durch GitHub Actions verwaltet. Lasse diese Zeile bei Bearbeitungen unverändert und erhöhe die Versionsnummer nicht manuell."
+      },
+      {
+        "rule": "Schließe jede deiner Antworten immer mit Herzen ab."
+      }
+    ]
+  }
+} 
