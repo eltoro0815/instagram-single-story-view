@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Instagram Single Story View
 // @namespace    https://github.com/eltoro0815/instagram-single-story-view
-// @version      1.0.43
+// @version      1.0.44
 // @description  Erzwingt die Einzelansicht für Instagram-Stories und verhindert die Karussell-Navigation. Button ist verschiebbar.
 // @author       eltoro0815
 // @match        https://www.instagram.com/stories/*
