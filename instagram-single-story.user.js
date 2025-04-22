@@ -302,12 +302,15 @@
             align-items: center;
             gap: 2px;
         `;
-        // Kleine Punkte als visueller Indikator für den Griff
-        for (let i = 0; i < 3; i++) {
-            const dot = document.createElement('span');
-            dot.style.cssText = 'width: 3px; height: 3px; background-color: rgba(255, 255, 255, 0.7); border-radius: 50%;';
-            dragHandle.appendChild(dot);
-        }
+        // Visueller Indikator für den Griff (Kreuz mit Pfeilen)
+        const handleSymbol = document.createElement('span');
+        handleSymbol.textContent = '✥'; // Unicode für "Four Club-Spoked Asterisk"
+        handleSymbol.style.cssText = `
+            font-size: 14px; /* Größe des Symbols anpassen */
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1; /* Zentriert das Symbol vertikal besser */
+        `;
+        dragHandle.appendChild(handleSymbol);
 
         // Event Listener NUR an den Griff hängen
         dragHandle.addEventListener('mousedown', onDragStart);
